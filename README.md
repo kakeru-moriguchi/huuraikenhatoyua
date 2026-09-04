@@ -67,3 +67,7 @@ npm run dev
 npm run build
 ```
 
+## Vercel
+
+VercelへのGitHubインポートに対応しています。`vercel.json` がビルドコマンドを設定するため、Root Directoryを `./` のままデプロイできます。Vercel環境ではNitroアダプターがBuild Output API形式を生成し、既存のSites / Cloudflare向けビルドはそのまま維持します。
+
