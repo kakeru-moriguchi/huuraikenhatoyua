@@ -1,10 +1,12 @@
 # 3試合保証トーナメント
 
-1部8チーム・2部16チーム・3部8チームを管理する、3試合保証の大会運営Webアプリです。1部と3部は各12試合、2部はA/B各12試合と総合決勝1試合で進行します。
+男子・女子など2日分の大会を独立して管理できる、3試合保証の大会運営Webアプリです。各日とも1部8チーム・2部16チーム・3部8チームで、1部と3部は各12試合、2部はA/B各12試合と総合決勝1試合で進行します。
 
 ## 画面構成
 
-1. **大会設定** — 大会名、開催日
+画面上部の「1日目・男子」「2日目・女子」で大会を切り替えます。チーム、得点、順位は開催日ごとに完全に独立しています。
+
+1. **大会設定** — 大会名、カテゴリー、開催日
 2. **チーム登録** — 8チームをシード順に登録
 3. **トーナメント** — 全12試合と進出経路を表示
 4. **試合結果入力** — スコア入力、勝敗判定、後続試合への自動配置
@@ -21,17 +23,26 @@ type BracketState = {
 }
 
 type AppState = {
+  version: 3
+  tournaments: {
+    day1: TournamentState
+    day2: TournamentState
+  }
+}
+
+type TournamentState = {
   name: string
+  category: string
   date: string
   divisions: {
-    1: BracketState
-    2: {
-      A: BracketState
-      B: BracketState
-      grandFinal: { a: string; b: string }
+      1: BracketState
+      2: {
+        A: BracketState
+        B: BracketState
+        grandFinal: { a: string; b: string }
+      }
+      3: BracketState
     }
-    3: BracketState
-  }
 }
 
 type MatchDefinition = {
@@ -48,7 +59,7 @@ type MatchSource =
   | { type: 'winner' | 'loser'; matchId: MatchId }
 ```
 
-試合定義と入力スコアを分離し、出場チーム・勝者・敗者・順位は常に導出値として再計算します。端末内の `localStorage` に自動保存します。旧バージョンの単一大会データは1部へ自動移行します。
+試合定義と入力スコアを分離し、出場チーム・勝者・敗者・順位は常に導出値として再計算します。端末内の `localStorage` に自動保存します。旧バージョンの単一大会データは「1日目・男子」へ自動移行し、「2日目・女子」は新規の空データとして作成します。
 
 ## 部門構成
 

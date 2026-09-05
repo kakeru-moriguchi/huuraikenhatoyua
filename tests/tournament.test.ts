@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createInitialAppState, migratePreviousState } from '../lib/event.ts';
 import {
   createEmptyBracket,
   getRanking,
@@ -72,5 +73,34 @@ void test('1部・2部A/B・3部の4つの8チーム枠を独立して計算で�
     ).winner,
     'D2B-1',
   );
+});
+
+void test('1日目と2日目の大会データは完全に独立している', () => {
+  const state = createInitialAppState();
+  state.tournaments.day1.divisions[1].teams[0] = '男子チーム';
+  state.tournaments.day1.divisions[2].A.scores.M01 = { a: '3', b: '1' };
+
+  assert.equal(state.tournaments.day2.divisions[1].teams[0], '');
+  assert.deepEqual(state.tournaments.day2.divisions[2].A.scores.M01, { a: '', b: '' });
+  assert.equal(state.tournaments.day1.category, '男子');
+  assert.equal(state.tournaments.day2.category, '女子');
+});
+
+void test('従来の大会データは1日目へ移行し2日目は初期状態を保つ', () => {
+  const previous = completedBracket();
+  const migrated = migratePreviousState({
+    name: '既存大会',
+    date: '2026-09-10',
+    divisions: {
+      1: previous,
+      2: { A: previous, B: previous, grandFinal: { a: '2', b: '1' } },
+      3: previous,
+    },
+  }, 2);
+
+  assert.equal(migrated.tournaments.day1.name, '既存大会');
+  assert.equal(migrated.tournaments.day1.divisions[1].teams[0], 'Team 1');
+  assert.deepEqual(migrated.tournaments.day1.divisions[2].grandFinal, { a: '2', b: '1' });
+  assert.equal(migrated.tournaments.day2.divisions[1].teams[0], '');
 });
 
