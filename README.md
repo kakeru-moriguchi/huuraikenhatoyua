@@ -1,6 +1,6 @@
 # 3試合保証トーナメント
 
-8チームが必ず3試合を行い、全12試合で1位から8位までを決める大会運営Webアプリです。
+1部8チーム・2部16チーム・3部8チームを管理する、3試合保証の大会運営Webアプリです。1部と3部は各12試合、2部はA/B各12試合と総合決勝1試合で進行します。
 
 ## 画面構成
 
@@ -15,11 +15,23 @@
 ## データ構造
 
 ```ts
-type TournamentState = {
-  name: string
-  date: string
+type BracketState = {
   teams: string[] // シード順、必ず8件
   scores: Record<MatchId, { a: string; b: string }>
+}
+
+type AppState = {
+  name: string
+  date: string
+  divisions: {
+    1: BracketState
+    2: {
+      A: BracketState
+      B: BracketState
+      grandFinal: { a: string; b: string }
+    }
+    3: BracketState
+  }
 }
 
 type MatchDefinition = {
@@ -36,7 +48,17 @@ type MatchSource =
   | { type: 'winner' | 'loser'; matchId: MatchId }
 ```
 
-試合定義と入力スコアを分離し、出場チーム・勝者・敗者・順位は常に導出値として再計算します。端末内の `localStorage` に自動保存します。
+試合定義と入力スコアを分離し、出場チーム・勝者・敗者・順位は常に導出値として再計算します。端末内の `localStorage` に自動保存します。旧バージョンの単一大会データは1部へ自動移行します。
+
+## 部門構成
+
+- **1部** — 8チーム、M01〜M12で1位〜8位を決定
+- **2部 Aブロック** — 8チーム、A-M01〜A-M12でブロック1位〜8位を決定
+- **2部 Bブロック** — 8チーム、B-M01〜B-M12でブロック1位〜8位を決定
+- **2部 総合決勝** — `division: 2 / stage: grand_final / id: D2-GF`。A/Bブロック優勝同士で総合優勝・準優勝を決定
+- **3部** — 8チーム、M01〜M12で1位〜8位を決定
+
+2部のA/Bブロックは完全に独立して進行します。ブロック優勝の変更により総合決勝の出場チームが変わった場合、総合決勝スコアだけを自動リセットします。
 
 ## 試合IDと遷移
 
