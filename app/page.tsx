@@ -576,7 +576,7 @@ export default function Home() {
   const tournamentContext = `${activeDayLabel}・${activeTournament.category || 'カテゴリー未設定'}`;
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell app-shell--${activeDay}`}>
       <header className="topbar">
         <div className="brand-lockup">
           <span className="brand-mark"><Trophy size={20} /></span>
