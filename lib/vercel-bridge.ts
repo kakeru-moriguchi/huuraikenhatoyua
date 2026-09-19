@@ -26,7 +26,7 @@ export class VercelBridgeError extends Error {
 function bridgeConfig() {
   const baseUrl = process.env.SITES_BACKEND_URL?.replace(/\/$/, '');
   const bypassToken = process.env.SITES_BYPASS_TOKEN;
-  const bridgeSecret = process.env.VERCEL_BRIDGE_SECRET;
+  const bridgeSecret = process.env.TOURNAMENT_BRIDGE_SECRET;
   if (!baseUrl || !bypassToken || !bridgeSecret) throw new Error('Vercel bridge configuration is incomplete.');
   return { baseUrl, bypassToken, bridgeSecret };
 }

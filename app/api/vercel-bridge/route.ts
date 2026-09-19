@@ -22,7 +22,7 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 function isAuthorized(request: Request): boolean {
-  const configuredSecret = (env as { VERCEL_BRIDGE_SECRET?: string }).VERCEL_BRIDGE_SECRET;
+  const configuredSecret = (env as { TOURNAMENT_BRIDGE_SECRET?: string }).TOURNAMENT_BRIDGE_SECRET;
   const suppliedSecret = request.headers.get('x-vercel-bridge-secret');
   return Boolean(configuredSecret && suppliedSecret && constantTimeEqual(configuredSecret, suppliedSecret));
 }
