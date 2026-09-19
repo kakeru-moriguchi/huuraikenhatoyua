@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/postcss';
 import tailwindcssVite from '@tailwindcss/vite';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
+import { fileURLToPath } from 'node:url';
 import hostingConfig from './.openai/hosting.json';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
@@ -49,6 +50,11 @@ export default defineConfig(async () => {
     const { nitro } = await import('nitro/vite');
 
     return {
+      resolve: {
+        alias: {
+          'cloudflare:workers': fileURLToPath(new URL('./lib/vercel-cloudflare-shim.ts', import.meta.url)),
+        },
+      },
       plugins: [tailwindcssVite(), vinext(), nitro()],
     };
   }
@@ -71,3 +77,4 @@ export default defineConfig(async () => {
     ],
   };
 });
+
