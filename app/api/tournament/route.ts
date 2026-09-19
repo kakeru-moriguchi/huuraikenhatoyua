@@ -1,5 +1,6 @@
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { isAdminUser } from '@/app/admin-access';
+import { hasCurrentAdminSession } from '@/app/admin-session';
 import { getTournamentSnapshot, saveTournamentState } from '@/db/tournament';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,7 @@ export async function PUT(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: 'ログインが必要です。' }, { status: 401 });
   if (!isAdminUser(user)) return Response.json({ error: '管理者権限がありません。' }, { status: 403 });
+  if (!(await hasCurrentAdminSession(user.email))) return Response.json({ error: '管理者パスワードを入力してください。' }, { status: 401 });
 
   try {
     const body = await request.json() as { state?: unknown };

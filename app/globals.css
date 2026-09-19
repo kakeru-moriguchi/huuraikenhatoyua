@@ -179,6 +179,17 @@ button, input { font: inherit; }
 .access-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
 .access-actions a { padding: 10px 14px; color: #fff; background: #7a1f2a; border-radius: 9px; font-size: .82rem; font-weight: 700; text-decoration: none; }
 .access-actions a + a { color: #7a1f2a; background: #fff1f2; }
+.password-card { position: relative; padding-top: 34px; }
+.password-icon { width: 50px; height: 50px; display: grid; place-items: center; margin-bottom: 20px; color: #fff; background: #7a1f2a; border-radius: 15px; box-shadow: 0 9px 24px rgba(122,31,42,.2); }
+.password-form { display: grid; gap: 17px; margin-top: 24px; }
+.password-form label > span { display: block; margin-bottom: 7px; color: #4f3a3d; font-size: .82rem; font-weight: 750; }
+.password-form input { min-height: 48px; font-size: 1rem; }
+.password-input { position: relative; }
+.password-input input { padding-right: 46px; }
+.password-input button { position: absolute; top: 50%; right: 7px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; color: #765f62; background: transparent; border: 0; border-radius: 8px; transform: translateY(-50%); cursor: pointer; }
+.password-input button:hover { background: #f3e9ea; }
+.password-form > button { min-height: 48px; margin-top: 3px; background: #7a1f2a; }
+.password-error { margin: -3px 0 0 !important; padding: 9px 11px; color: #982b39 !important; background: #fff1f2; border-radius: 8px; font-size: .78rem; line-height: 1.5 !important; }
 
 @media (max-width: 900px) {
   .overview { grid-template-columns: 1fr; } .metrics { width: 100%; } .metrics div { flex: 1; min-width: 0; }

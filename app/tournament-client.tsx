@@ -10,6 +10,7 @@ import {
   Crown,
   Eye,
   LockKeyhole,
+  LogOut,
   Medal,
   RefreshCw,
   RotateCcw,
@@ -594,6 +595,15 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   };
 
+  const logoutAdmin = async () => {
+    await fetch('/api/admin/auth', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    });
+    window.location.replace('/admin');
+  };
+
   useEffect(() => {
     if (!isAdmin || !document.modelContext?.registerTool) return;
     const lifecycle = new AbortController();
@@ -661,6 +671,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             {isAdmin ? saveStatus === 'saving' ? '共有データへ保存中' : saveStatus === 'error' ? '保存エラー' : '共有データへ自動保存' : '10秒ごとに自動更新'}
           </span>
           <a className="mode-link" href={isAdmin ? '/' : '/admin'}>{isAdmin ? <Eye size={15} /> : <LockKeyhole size={15} />}{isAdmin ? '参加者画面' : '管理者画面'}</a>
+          {isAdmin ? <button className="mode-link" type="button" onClick={logoutAdmin}><LogOut size={15} />管理終了</button> : null}
           {isAdmin ? (
             <AlertDialog>
               <AlertDialogTrigger render={<Button variant="outline" size="sm" />}><RotateCcw size={15} /> リセット</AlertDialogTrigger>

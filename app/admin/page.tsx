@@ -1,8 +1,10 @@
 import { isAdminUser } from '@/app/admin-access';
+import { AdminPasswordGate } from '@/app/admin-password-gate';
+import { hasCurrentAdminSession } from '@/app/admin-session';
 import { chatGPTSignOutPath, requireChatGPTUser } from '@/app/chatgpt-auth';
 import { TournamentApp } from '@/app/tournament-client';
 import { getTournamentSnapshot } from '@/db/tournament';
-import { createInitialAppState } from '@/lib/event';
+import { isAdminPasswordConfigured } from '@/db/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,10 +24,22 @@ export default async function AdminPage() {
   }
 
   try {
+    const passwordConfigured = await isAdminPasswordConfigured();
+    if (!passwordConfigured) return <AdminPasswordGate mode="setup" />;
+    if (!(await hasCurrentAdminSession(user.email))) return <AdminPasswordGate mode="login" />;
     const snapshot = await getTournamentSnapshot();
     return <TournamentApp initialState={snapshot.state} mode="admin" />;
   } catch (error) {
     console.error('Failed to render admin page', error);
-    return <TournamentApp initialState={createInitialAppState()} mode="admin" initialLoadError="共有データを読み込めませんでした。入力は復旧後に行ってください。" />;
+    return (
+      <main className="access-page">
+        <section className="access-card">
+          <p className="eyebrow">管理者画面</p>
+          <h1>管理者画面を開けません</h1>
+          <p>認証情報を確認できませんでした。少し待ってから再読み込みしてください。</p>
+          <div className="access-actions"><a href="/">参加者画面へ</a></div>
+        </section>
+      </main>
+    );
   }
 }
