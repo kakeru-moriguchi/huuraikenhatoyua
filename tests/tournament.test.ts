@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createInitialAppState, migratePreviousState } from '../lib/event.ts';
+import { createInitialAppState, migratePreviousState, normalizeAppState } from '../lib/event.ts';
 import {
   createEmptyBracket,
   getRanking,
@@ -79,11 +79,26 @@ void test('1日目と2日目の大会データは完全に独立している', (
   const state = createInitialAppState();
   state.tournaments.day1.divisions[1].teams[0] = '男子チーム';
   state.tournaments.day1.divisions[2].A.scores.M01 = { a: '3', b: '1' };
+  state.tournaments.day1.schedule['D1-M01'] = { startTime: '09:30', court: 'Aコート' };
 
   assert.equal(state.tournaments.day2.divisions[1].teams[0], '');
   assert.deepEqual(state.tournaments.day2.divisions[2].A.scores.M01, { a: '', b: '' });
+  assert.deepEqual(state.tournaments.day2.schedule['D1-M01'], { startTime: '', court: '' });
   assert.equal(state.tournaments.day1.category, '男子');
   assert.equal(state.tournaments.day2.category, '女子');
+});
+
+void test('各大会に49試合分の進行表があり、旧データには空欄を自動補完する', () => {
+  const current = createInitialAppState();
+  assert.equal(Object.keys(current.tournaments.day1.schedule).length, 49);
+  assert.ok(current.tournaments.day1.schedule['D2-GF']);
+
+  const legacyLike = structuredClone(current) as unknown as Record<string, unknown>;
+  const tournaments = legacyLike.tournaments as Record<string, Record<string, unknown>>;
+  delete tournaments.day1.schedule;
+  const normalized = normalizeAppState(legacyLike as never);
+  assert.equal(normalized.version, 4);
+  assert.deepEqual(normalized.tournaments.day1.schedule['D2-A-M09'], { startTime: '', court: '' });
 });
 
 void test('従来の大会データは1日目へ移行し2日目は初期状態を保つ', () => {

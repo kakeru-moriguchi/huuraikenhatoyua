@@ -10,6 +10,7 @@ import {
   Crown,
   Eye,
   LockKeyhole,
+  MapPin,
   LogOut,
   Medal,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
   Save,
   Settings2,
   Shield,
+  Timer,
   Trophy,
   UploadCloud,
   Users,
@@ -59,6 +61,8 @@ import {
   type DivisionId,
   type DivisionTwoState,
   type PreviousAppState,
+  type ScheduleEntry,
+  type ScheduleMatchId,
   type TournamentDayId,
   type TournamentState,
 } from '@/lib/event';
@@ -81,7 +85,8 @@ declare global {
   }
 }
 
-const STORAGE_KEY = 'three-match-tournament-v3';
+const STORAGE_KEY = 'three-match-tournament-v4';
+const VERSION_THREE_STORAGE_KEY = 'three-match-tournament-v3';
 const PREVIOUS_STORAGE_KEY = 'three-match-tournament-v2';
 const LEGACY_STORAGE_KEY = 'three-match-tournament-v1';
 const GRAND_FINAL = {
@@ -89,6 +94,102 @@ const GRAND_FINAL = {
   division: 2,
   stage: 'grand_final',
 } as const;
+
+type ScheduleRow = {
+  id: ScheduleMatchId;
+  section: string;
+  title: string;
+  teamA: string;
+  teamB: string;
+  score: Score;
+  winner: string;
+};
+
+function scheduleRows(tournament: TournamentState): ScheduleRow[] {
+  const rows: ScheduleRow[] = [];
+  const addBracket = (prefix: 'D1' | 'D2-A' | 'D2-B' | 'D3', section: string, bracket: BracketState) => {
+    const resolved = resolveTournament(bracket);
+    for (const match of MATCHES) {
+      const detail = resolved[match.id];
+      rows.push({
+        id: `${prefix}-${match.id}`,
+        section,
+        title: match.title,
+        teamA: detail.teamA,
+        teamB: detail.teamB,
+        score: bracket.scores[match.id],
+        winner: detail.winner,
+      });
+    }
+  };
+
+  addBracket('D1', '1部', tournament.divisions[1]);
+  addBracket('D2-A', '2部 Aブロック', tournament.divisions[2].A);
+  addBracket('D2-B', '2部 Bブロック', tournament.divisions[2].B);
+  const champions = blockChampions(tournament.divisions[2]);
+  const grandFinal = resolveGrandFinal(champions, tournament.divisions[2].grandFinal);
+  rows.push({
+    id: 'D2-GF',
+    section: '2部 総合決勝',
+    title: '総合決勝',
+    teamA: grandFinal.teamA,
+    teamB: grandFinal.teamB,
+    score: tournament.divisions[2].grandFinal,
+    winner: grandFinal.winner,
+  });
+  addBracket('D3', '3部', tournament.divisions[3]);
+  return rows;
+}
+
+function ScheduleBoard({
+  tournament,
+  editable,
+  onChange,
+}: {
+  tournament: TournamentState;
+  editable: boolean;
+  onChange: (id: ScheduleMatchId, change: Partial<ScheduleEntry>) => void;
+}) {
+  const rows = useMemo(() => scheduleRows(tournament), [tournament]);
+  const sections = [...new Set(rows.map((row) => row.section))];
+
+  return <div className="schedule-board">
+    {sections.map((section) => <section className="schedule-section" key={section}>
+      <div className="schedule-section__head">
+        <h3>{section}</h3>
+        <span>{rows.filter((row) => row.section === section).length}試合</span>
+      </div>
+      <div className="schedule-table">
+        <div className="schedule-table__header" aria-hidden="true">
+          <span>試合</span><span>開始時刻</span><span>コート</span><span>対戦</span><span>結果</span>
+        </div>
+        {rows.filter((row) => row.section === section).map((row) => {
+          const schedule = tournament.schedule[row.id];
+          const ready = Boolean(row.teamA && row.teamB);
+          const hasScore = row.score.a !== '' && row.score.b !== '';
+          return <article className="schedule-row" key={row.id}>
+            <div className="schedule-row__match">
+              <strong>{row.id}</strong><span>{row.title}</span>
+            </div>
+            <div className="schedule-row__field schedule-row__time" data-label="開始時刻">
+              {editable ? <Input aria-label={`${row.id}の開始時刻`} type="time" value={schedule.startTime} onChange={(event) => onChange(row.id, { startTime: event.target.value })} /> : <span><Timer size={15} />{schedule.startTime || '未設定'}</span>}
+            </div>
+            <div className="schedule-row__field schedule-row__court" data-label="コート">
+              {editable ? <Input aria-label={`${row.id}のコート`} value={schedule.court} maxLength={24} placeholder="例：Aコート" onChange={(event) => onChange(row.id, { court: event.target.value })} /> : <span><MapPin size={15} />{schedule.court || '未設定'}</span>}
+            </div>
+            <div className="schedule-row__teams" data-label="対戦">
+              <strong>{row.teamA || '未定'}</strong><span>VS</span><strong>{row.teamB || '未定'}</strong>
+            </div>
+            <div className="schedule-row__result" data-label="結果">
+              <strong>{hasScore ? `${row.score.a} - ${row.score.b}` : '—'}</strong>
+              <span className={`status ${row.winner ? 'status--done' : ready ? 'status--ready' : ''}`}>{row.winner ? '終了' : ready ? '結果待ち' : '対戦待ち'}</span>
+            </div>
+          </article>;
+        })}
+      </div>
+    </section>)}
+  </div>;
+}
 
 function blockChampions(division: DivisionTwoState): [string, string] {
   return [
@@ -399,12 +500,15 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   useEffect(() => {
     if (!isAdmin) return;
     const saved = localStorage.getItem(STORAGE_KEY);
+    const versionThree = localStorage.getItem(VERSION_THREE_STORAGE_KEY);
     const previous = localStorage.getItem(PREVIOUS_STORAGE_KEY);
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
     let hydratedState: AppState | null = null;
     try {
       if (saved) {
         hydratedState = normalizeAppState(JSON.parse(saved) as Partial<AppState>);
+      } else if (versionThree) {
+        hydratedState = normalizeAppState(JSON.parse(versionThree) as Partial<AppState>);
       } else if (previous) {
         hydratedState = migratePreviousState(JSON.parse(previous) as PreviousAppState, 2);
       } else if (legacy) {
@@ -482,6 +586,25 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
         [activeDay]: { ...previous.tournaments[activeDay], ...change },
       },
     }));
+  };
+
+  const updateSchedule = (id: ScheduleMatchId, change: Partial<ScheduleEntry>) => {
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            schedule: {
+              ...tournament.schedule,
+              [id]: { ...tournament.schedule[id], ...change },
+            },
+          },
+        },
+      };
+    });
   };
 
   const updateMainBracket = (day: TournamentDayId, id: 1 | 3, change: (bracket: BracketState) => BracketState) => {
@@ -591,6 +714,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     applyState(localImport);
     setLocalImport(null);
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(VERSION_THREE_STORAGE_KEY);
     localStorage.removeItem(PREVIOUS_STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
   };
@@ -678,7 +802,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>2日分の大会データをリセットしますか？</AlertDialogTitle>
-                  <AlertDialogDescription>男子・女子両大会の登録チームと全試合結果が消去されます。この操作は元に戻せません。</AlertDialogDescription>
+                  <AlertDialogDescription>男子・女子両大会の登録チーム、全試合結果、進行表が消去されます。この操作は元に戻せません。</AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>キャンセル</AlertDialogCancel>
@@ -727,6 +851,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             {isAdmin ? <TabsTrigger value="setup"><Settings2 size={16} /><span>大会設定</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="teams"><Users size={16} /><span>チーム登録</span><em>{currentTeamCount}/{currentTeamTarget}</em></TabsTrigger> : null}
             <TabsTrigger value="bracket"><Shield size={16} /><span>トーナメント</span></TabsTrigger>
+            <TabsTrigger value="schedule"><Timer size={16} /><span>進行表</span></TabsTrigger>
             {isAdmin ? <TabsTrigger value="scores"><CircleDot size={16} /><span>結果入力</span><em>{currentCompleted}/{currentMatchTarget}</em></TabsTrigger> : null}
             <TabsTrigger value="ranking"><Medal size={16} /><span>最終順位</span></TabsTrigger>
           </TabsList>
@@ -782,6 +907,14 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             </div> : null}
           </TabsContent>
 
+          <TabsContent value="schedule" className="panel panel--wide">
+            <div className="panel-heading">
+              <div><span>{tournamentContext} · 全49試合</span><h2>大会進行表</h2><p>{isAdmin ? '開始時刻とコートを入力すると、参加者画面へ自動で反映されます。' : '全部門の開始時刻、コート、対戦状況を確認できます。'}</p></div>
+              <Timer size={30} />
+            </div>
+            <ScheduleBoard tournament={activeTournament} editable={isAdmin} onChange={updateSchedule} />
+          </TabsContent>
+
           {isAdmin ? <TabsContent value="scores" className="panel panel--wide">
             <div className="panel-heading">
               <div><span>STEP 04 · {divisionLabel}</span><h2>試合結果入力</h2><p>修正で出場チームが変わる後続試合は、自動的に未入力へ戻ります。</p></div>
@@ -817,3 +950,4 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     </main>
   );
 }
+
