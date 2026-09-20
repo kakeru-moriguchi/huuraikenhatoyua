@@ -18,6 +18,7 @@ import {
   Save,
   Settings2,
   Shield,
+  Shuffle,
   Timer,
   Trophy,
   UploadCloud,
@@ -46,6 +47,7 @@ import {
   resolveGrandFinal,
   resolveTournament,
   scoreWinner,
+  shuffleTeams,
   type BracketState,
   type MatchDefinition,
   type MatchId,
@@ -94,6 +96,11 @@ const GRAND_FINAL = {
   division: 2,
   stage: 'grand_final',
 } as const;
+
+function secureRandom() {
+  const [value] = crypto.getRandomValues(new Uint32Array(1));
+  return value / 0x1_0000_0000;
+}
 
 type ScheduleRow = {
   id: ScheduleMatchId;
@@ -200,7 +207,7 @@ function blockChampions(division: DivisionTwoState): [string, string] {
 
 function sourceLabel(source: MatchSource) {
   return source.type === 'seed'
-    ? `第${source.seed}シード`
+    ? `抽選枠 ${source.seed}`
     : `${source.matchId} ${source.type === 'winner' ? '勝者' : '敗者'}`;
 }
 
@@ -658,6 +665,11 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     (grandFinalResolved.winner ? 1 : 0);
   const currentCompleted = division === 2 ? divisionTwoCompleted : blockCompleted;
   const currentMatchTarget = division === 2 ? 25 : 12;
+  const randomDrawReady = division === 2 ? d2TeamCount === 16 : activeTeamCount === 8;
+  const randomDrawHasResults = division === 2
+    ? [...MATCH_IDS.map((id) => activeTournament.divisions[2].A.scores[id]), ...MATCH_IDS.map((id) => activeTournament.divisions[2].B.scores[id]), activeTournament.divisions[2].grandFinal]
+      .some((score) => score.a !== '' || score.b !== '')
+    : MATCH_IDS.some((id) => activeBracket.scores[id].a !== '' || activeBracket.scores[id].b !== '');
 
   const updateTeam = (index: number, value: string) => {
     const change = (bracket: BracketState) => {
@@ -667,6 +679,34 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     };
     if (division === 2) updateDivisionTwoBlock(activeDay, selectedBlock, change);
     else updateMainBracket(activeDay, division, change);
+  };
+
+  const randomizeDraw = () => {
+    if (!randomDrawReady) return;
+    if (division === 2) {
+      applyState((previous) => {
+        const tournament = previous.tournaments[activeDay];
+        const current = tournament.divisions[2];
+        const beforeChampions = blockChampions(current);
+        const teams = shuffleTeams([...current.A.teams, ...current.B.teams], secureRandom);
+        const nextDivision: DivisionTwoState = {
+          A: reconcileScores(current.A, { ...current.A, teams: teams.slice(0, 8) }),
+          B: reconcileScores(current.B, { ...current.B, teams: teams.slice(8, 16) }),
+          grandFinal: current.grandFinal,
+        };
+        nextDivision.grandFinal = reconcileGrandFinal(beforeChampions, blockChampions(nextDivision), current.grandFinal);
+        return {
+          ...previous,
+          tournaments: {
+            ...previous.tournaments,
+            [activeDay]: { ...tournament, divisions: { ...tournament.divisions, 2: nextDivision } },
+          },
+        };
+      });
+    } else {
+      updateMainBracket(activeDay, division, (bracket) => ({ ...bracket, teams: shuffleTeams(bracket.teams, secureRandom) }));
+    }
+    setActiveTab('bracket');
   };
 
   const updateScore = (id: MatchId, side: 'a' | 'b', value: string) => {
@@ -874,7 +914,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           {isAdmin ? <TabsContent value="teams" className="panel">
             <div className="panel-heading">
-              <div><span>STEP 02 · {divisionLabel}</span><h2>チーム登録</h2><p>{division === 2 ? 'A・Bブロックへ8チームずつ登録します。' : 'シード順に8チームを登録します。1回戦は1位対8位の形式です。'}</p></div>
+              <div><span>STEP 02 · {divisionLabel}</span><h2>チーム登録・組み合わせ抽選</h2><p>{division === 2 ? 'A・Bへ8チームずつ登録後、16チーム全体からブロック分けと対戦をランダム抽選します。' : '8チームを登録後、1回戦の組み合わせをランダム抽選します。'}</p></div>
               <Users size={30} />
             </div>
             {division === 2 ? <BlockSelector value={selectedBlock} includeGrandFinal={false} onChange={(value) => setD2View(value === 'B' ? 'B' : 'A')} /> : null}
@@ -882,7 +922,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               {activeBracket.teams.map((team, index) => (
                 <label className="team-field" key={index}>
                   <span className="seed-number">{division === 2 ? selectedBlock : ''}{String(index + 1).padStart(2, '0')}</span>
-                  <span className="sr-only">{divisionLabel}{division === 2 ? `${selectedBlock}ブロック` : ''}第{index + 1}シード</span>
+                  <span className="sr-only">{divisionLabel}{division === 2 ? `${selectedBlock}ブロック` : ''}登録枠{index + 1}</span>
                   <Input value={team} onChange={(event) => updateTeam(index, event.target.value)} placeholder={`${division === 2 ? selectedBlock + ' ' : ''}チーム ${index + 1}`} />
                 </label>
               ))}
@@ -890,7 +930,25 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             {activeTeamCount < 8
               ? <p className="hint">{division === 2 ? `${selectedBlock}ブロック：` : ''}あと{8 - activeTeamCount}チームを登録してください。</p>
               : <p className="success-note"><Check size={15} /> {division === 2 ? `${selectedBlock}ブロックの` : ''}8チーム登録が完了しました。</p>}
-            <div className="panel-actions"><Button disabled={!blockReady} onClick={() => setActiveTab('bracket')}>組み合わせを見る <ArrowRight size={16} /></Button></div>
+            {division === 2 && d2TeamCount < 16 ? <p className="hint">2部のランダム抽選まで、A・B合わせてあと{16 - d2TeamCount}チームです。</p> : null}
+            <div className="team-actions">
+              {randomDrawHasResults ? (
+                <AlertDialog>
+                  <AlertDialogTrigger render={<Button variant="outline" disabled={!randomDrawReady} />}><Shuffle size={16} />もう一度ランダム抽選</AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{divisionLabel}{division === 2 ? '・A/B両ブロック' : ''}を再抽選しますか？</AlertDialogTitle>
+                      <AlertDialogDescription>組み合わせが変わるため、影響する入力済み試合結果はリセットされます。進行表の対戦カードも新しい組み合わせへ更新されます。</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                      <AlertDialogAction onClick={randomizeDraw}>再抽選する</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : <Button variant="outline" disabled={!randomDrawReady} onClick={randomizeDraw}><Shuffle size={16} />{division === 2 ? '16チームをランダム抽選' : '8チームをランダム抽選'}</Button>}
+              <Button disabled={!blockReady} onClick={() => setActiveTab('bracket')}>現在の組み合わせを見る <ArrowRight size={16} /></Button>
+            </div>
           </TabsContent> : null}
 
           <TabsContent value="bracket" className="panel panel--wide">

@@ -101,6 +101,10 @@ button, input { font: inherit; }
 .panel-actions { display: flex; justify-content: flex-end; margin-top: 28px; }
 .panel-actions button { min-height: 44px; gap: 8px; padding-inline: 20px; background: var(--brand-main); }
 .panel-actions button:hover { background: var(--brand-hover); }
+.team-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 28px; }
+.team-actions button { min-height: 44px; gap: 8px; padding-inline: 20px; }
+.team-actions > button:last-child { background: var(--brand-main); }
+.team-actions > button:last-child:hover { background: var(--brand-hover); }
 .form-grid { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 18px; max-width: 1050px; }
 .form-grid label > span { display: block; margin-bottom: 8px; font-size: .78rem; font-weight: 700; }
 .form-grid input, .team-field input { min-height: 46px; background: #fff; }
@@ -244,7 +248,8 @@ button, input { font: inherit; }
   .form-grid, .team-grid { grid-template-columns: 1fr; } .rule-strip { grid-template-columns: repeat(4,1fr); gap: 5px; padding: 15px 8px; }
   .rule-strip > svg { display: none; } .rule-strip strong { font-size: 1.2rem; } .rule-strip span { font-size: .58rem; line-height: 1.3; }
   .bracket-grid { scroll-snap-type: x mandatory; } .round-column { width: 84vw; scroll-snap-align: start; }
-  .score-grid { grid-template-columns: 1fr; } .panel-actions button { width: 100%; }
+  .score-grid { grid-template-columns: 1fr; } .panel-actions button, .team-actions button { width: 100%; }
+  .team-actions { flex-direction: column; }
   .schedule-board { gap: 22px; } .schedule-table { grid-template-columns: 1fr; }
   .rank-row { grid-template-columns: 44px 1fr auto; min-height: 61px; padding-right: 12px; } .rank-number { width: 40px; height: 40px; }
   .block-nav { margin-top: -4px; } .block-nav button { padding-inline: 6px; font-size: .7rem; }

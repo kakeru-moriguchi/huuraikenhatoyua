@@ -8,6 +8,7 @@ import {
   reconcileScores,
   resolveGrandFinal,
   resolveTournament,
+  shuffleTeams,
   type MatchId,
 } from '../lib/tournament.ts';
 
@@ -19,6 +20,16 @@ const completedBracket = () => {
   }
   return bracket;
 };
+
+void test('ランダム抽選は全チームを重複・欠落なく並べ替える', () => {
+  const teams = Array.from({ length: 8 }, (_, index) => `Team ${index + 1}`);
+  const values = [0.12, 0.87, 0.34, 0.68, 0.05, 0.91, 0.46];
+  let index = 0;
+  const shuffled = shuffleTeams(teams, () => values[index++]);
+
+  assert.notDeepEqual(shuffled, teams);
+  assert.deepEqual([...shuffled].sort(), [...teams].sort());
+});
 
 void test('8チームの12試合から1位〜8位を重複なく決定する', () => {
   const resolved = resolveTournament(completedBracket());

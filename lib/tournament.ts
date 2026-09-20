@@ -51,6 +51,15 @@ export function createEmptyBracket(): BracketState {
   return { teams: Array.from({ length: 8 }, () => ''), scores: emptyScores() };
 }
 
+export function shuffleTeams(teams: string[], random: () => number = Math.random): string[] {
+  const shuffled = [...teams];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 export function scoreWinner(score: Score): 'a' | 'b' | null {
   if (score.a === '' || score.b === '') return null;
   const a = Number(score.a);
