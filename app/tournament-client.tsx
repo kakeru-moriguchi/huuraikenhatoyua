@@ -115,7 +115,7 @@ type ScheduleRow = {
   winner: string;
 };
 
-function scheduleRows(tournament: TournamentState): ScheduleRow[] {
+function scheduleRows(tournament: TournamentState, division: DivisionId): ScheduleRow[] {
   const rows: ScheduleRow[] = [];
   const addBracket = (prefix: 'D1' | 'D2-A' | 'D2-B' | 'D3', section: string, bracket: BracketState) => {
     const resolved = resolveTournament(bracket);
@@ -133,34 +133,38 @@ function scheduleRows(tournament: TournamentState): ScheduleRow[] {
     }
   };
 
-  addBracket('D1', '1部', tournament.divisions[1]);
-  addBracket('D2-A', '2部 Aブロック', tournament.divisions[2].A);
-  addBracket('D2-B', '2部 Bブロック', tournament.divisions[2].B);
-  const champions = blockChampions(tournament.divisions[2]);
-  const grandFinal = resolveGrandFinal(champions, tournament.divisions[2].grandFinal);
-  rows.push({
-    id: 'D2-GF',
-    section: '2部 総合決勝',
-    title: '総合決勝',
-    teamA: grandFinal.teamA,
-    teamB: grandFinal.teamB,
-    score: tournament.divisions[2].grandFinal,
-    winner: grandFinal.winner,
-  });
-  addBracket('D3', '3部', tournament.divisions[3]);
+  if (division === 1) addBracket('D1', '1部', tournament.divisions[1]);
+  if (division === 2) {
+    addBracket('D2-A', '2部 Aブロック', tournament.divisions[2].A);
+    addBracket('D2-B', '2部 Bブロック', tournament.divisions[2].B);
+    const champions = blockChampions(tournament.divisions[2]);
+    const grandFinal = resolveGrandFinal(champions, tournament.divisions[2].grandFinal);
+    rows.push({
+      id: 'D2-GF',
+      section: '2部 総合決勝',
+      title: '総合決勝',
+      teamA: grandFinal.teamA,
+      teamB: grandFinal.teamB,
+      score: tournament.divisions[2].grandFinal,
+      winner: grandFinal.winner,
+    });
+  }
+  if (division === 3) addBracket('D3', '3部', tournament.divisions[3]);
   return rows;
 }
 
 function ScheduleBoard({
   tournament,
+  division,
   editable,
   onChange,
 }: {
   tournament: TournamentState;
+  division: DivisionId;
   editable: boolean;
   onChange: (id: ScheduleMatchId, change: Partial<ScheduleEntry>) => void;
 }) {
-  const rows = useMemo(() => scheduleRows(tournament), [tournament]);
+  const rows = useMemo(() => scheduleRows(tournament, division), [tournament, division]);
   const sections = [...new Set(rows.map((row) => row.section))];
 
   return <div className="schedule-board">
@@ -944,6 +948,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             {isAdmin ? <TabsTrigger value="teams"><Users size={16} /><span>チーム登録</span><em>{currentTeamCount}/{currentTeamTarget}</em></TabsTrigger> : null}
             <TabsTrigger value="bracket"><Shield size={16} /><span>トーナメント</span></TabsTrigger>
             <TabsTrigger value="schedule"><Timer size={16} /><span>進行表</span></TabsTrigger>
+            <TabsTrigger value="practice"><MapPin size={16} /><span>練習コート</span></TabsTrigger>
             {isAdmin ? <TabsTrigger value="scores"><CircleDot size={16} /><span>結果入力</span><em>{currentCompleted}/{currentMatchTarget}</em></TabsTrigger> : null}
             <TabsTrigger value="ranking"><Medal size={16} /><span>最終順位</span></TabsTrigger>
           </TabsList>
@@ -1031,10 +1036,22 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           <TabsContent value="schedule" className="panel panel--wide">
             <div className="panel-heading">
-              <div><span>{tournamentContext} · 全49試合</span><h2>大会進行表</h2><p>{isAdmin ? '部門コートは大会設定から自動反映され、必要な試合だけ個別変更できます。' : '全部門の開始時刻、コート、対戦状況を確認できます。'}</p></div>
+              <div><span>{tournamentContext} · {divisionLabel} · 全{division === 2 ? 25 : 12}試合</span><h2>{divisionLabel} 進行表</h2><p>{isAdmin ? '選択中の部門だけを表示しています。部門コートは大会設定から自動反映され、必要な試合だけ個別変更できます。' : '選択中の部門の開始時刻、コート、対戦状況を確認できます。'}</p></div>
               <Timer size={30} />
             </div>
-            <ScheduleBoard tournament={activeTournament} editable={isAdmin} onChange={updateSchedule} />
+            <ScheduleBoard tournament={activeTournament} division={division} editable={isAdmin} onChange={updateSchedule} />
+          </TabsContent>
+
+          <TabsContent value="practice" className="panel">
+            <div className="panel-heading">
+              <div><span>{tournamentContext}</span><h2>練習コート</h2><p>選択中の開催日の練習コートを確認できます。</p></div>
+              <MapPin size={30} />
+            </div>
+            <div className="practice-court-card">
+              <MapPin size={34} />
+              <div><span>{activeTournament.category || tournamentContext} 練習コート</span><strong>{activeTournament.courts.practice || '未設定'}</strong></div>
+            </div>
+            {isAdmin ? <div className="panel-actions"><Button onClick={() => setActiveTab('setup')}>大会設定で変更 <ArrowRight size={16} /></Button></div> : null}
           </TabsContent>
 
           {isAdmin ? <TabsContent value="scores" className="panel panel--wide">
