@@ -55,11 +55,13 @@ import {
   type Score,
 } from '@/lib/tournament';
 import {
+  applyDivisionCourt,
   createInitialAppState,
   migratePreviousState,
   normalizeAppState,
   type AppState,
   type BlockId,
+  type CourtSettings,
   type DivisionId,
   type DivisionTwoState,
   type PreviousAppState,
@@ -87,7 +89,8 @@ declare global {
   }
 }
 
-const STORAGE_KEY = 'three-match-tournament-v4';
+const STORAGE_KEY = 'three-match-tournament-v5';
+const VERSION_FOUR_STORAGE_KEY = 'three-match-tournament-v4';
 const VERSION_THREE_STORAGE_KEY = 'three-match-tournament-v3';
 const PREVIOUS_STORAGE_KEY = 'three-match-tournament-v2';
 const LEGACY_STORAGE_KEY = 'three-match-tournament-v1';
@@ -377,6 +380,24 @@ function TournamentSelector({
   );
 }
 
+function CourtGuide({ courts }: { courts: CourtSettings }) {
+  const items = [
+    ['練習コート', courts.practice],
+    ['1部', courts.division1],
+    ['2部', courts.division2],
+    ['3部', courts.division3],
+  ];
+
+  return (
+    <section className="court-guide" aria-label="コート案内">
+      <div className="court-guide__title"><MapPin size={18} /><strong>コート案内</strong></div>
+      <div className="court-guide__items">
+        {items.map(([label, court]) => <div key={label}><span>{label}</span><strong>{court || '未設定'}</strong></div>)}
+      </div>
+    </section>
+  );
+}
+
 function DivisionSelector({
   division,
   tournament,
@@ -507,6 +528,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   useEffect(() => {
     if (!isAdmin) return;
     const saved = localStorage.getItem(STORAGE_KEY);
+    const versionFour = localStorage.getItem(VERSION_FOUR_STORAGE_KEY);
     const versionThree = localStorage.getItem(VERSION_THREE_STORAGE_KEY);
     const previous = localStorage.getItem(PREVIOUS_STORAGE_KEY);
     const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -514,6 +536,8 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     try {
       if (saved) {
         hydratedState = normalizeAppState(JSON.parse(saved) as Partial<AppState>);
+      } else if (versionFour) {
+        hydratedState = normalizeAppState(JSON.parse(versionFour) as Partial<AppState>);
       } else if (versionThree) {
         hydratedState = normalizeAppState(JSON.parse(versionThree) as Partial<AppState>);
       } else if (previous) {
@@ -608,6 +632,31 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               ...tournament.schedule,
               [id]: { ...tournament.schedule[id], ...change },
             },
+          },
+        },
+      };
+    });
+  };
+
+  const updateCourtSetting = (field: keyof CourtSettings, value: string) => {
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      const divisionByField: Partial<Record<keyof CourtSettings, DivisionId>> = {
+        division1: 1,
+        division2: 2,
+        division3: 3,
+      };
+      const targetDivision = divisionByField[field];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            courts: { ...tournament.courts, [field]: value },
+            schedule: targetDivision
+              ? applyDivisionCourt(tournament.schedule, targetDivision, value)
+              : tournament.schedule,
           },
         },
       };
@@ -754,6 +803,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     applyState(localImport);
     setLocalImport(null);
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(VERSION_FOUR_STORAGE_KEY);
     localStorage.removeItem(VERSION_THREE_STORAGE_KEY);
     localStorage.removeItem(PREVIOUS_STORAGE_KEY);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
@@ -871,6 +921,8 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           }}
         />
 
+        <CourtGuide courts={activeTournament.courts} />
+
         <section className="overview" aria-label="大会進行状況">
           <div className="overview-copy">
             <span className="kicker">{tournamentContext}・{divisionLabel}・全チーム3試合保証</span>
@@ -897,11 +949,23 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           </TabsList>
 
           {isAdmin ? <TabsContent value="setup" className="panel">
-            <div className="panel-heading"><div><span>STEP 01 · {tournamentContext}</span><h2>大会設定</h2><p>選択中の大会だけに適用される名称、カテゴリー、開催日を設定します。</p></div><CalendarDays size={30} /></div>
+            <div className="panel-heading"><div><span>STEP 01 · {tournamentContext}</span><h2>大会設定</h2><p>選択中の大会だけに適用される名称、カテゴリー、開催日、コートを設定します。</p></div><CalendarDays size={30} /></div>
             <div className="form-grid">
               <label htmlFor="tournament-name"><span>大会名</span><Input id="tournament-name" value={activeTournament.name} onChange={(event) => updateTournamentMeta({ name: event.target.value })} placeholder="大会名を入力" /></label>
               <label htmlFor="tournament-category"><span>カテゴリー</span><Input id="tournament-category" value={activeTournament.category} onChange={(event) => updateTournamentMeta({ category: event.target.value })} placeholder="例：男子" /></label>
               <label htmlFor="tournament-date"><span>開催日</span><Input id="tournament-date" type="date" value={activeTournament.date} onChange={(event) => updateTournamentMeta({ date: event.target.value })} /></label>
+            </div>
+            <div className="court-settings">
+              <div className="court-settings__heading">
+                <div><MapPin size={20} /><strong>コート設定</strong></div>
+                <p>部門コートを変更すると、その部の全試合へ自動反映されます。進行表では試合ごとの変更も可能です。</p>
+              </div>
+              <div className="court-settings__grid">
+                <label htmlFor="practice-court"><span>練習コート</span><Input id="practice-court" value={activeTournament.courts.practice} onChange={(event) => updateCourtSetting('practice', event.target.value)} placeholder="例：第4コート" /></label>
+                <label htmlFor="division1-court"><span>1部 使用コート</span><Input id="division1-court" value={activeTournament.courts.division1} onChange={(event) => updateCourtSetting('division1', event.target.value)} placeholder="例：Aコート" /></label>
+                <label htmlFor="division2-court"><span>2部 使用コート</span><Input id="division2-court" value={activeTournament.courts.division2} onChange={(event) => updateCourtSetting('division2', event.target.value)} placeholder="例：Bコート" /></label>
+                <label htmlFor="division3-court"><span>3部 使用コート</span><Input id="division3-court" value={activeTournament.courts.division3} onChange={(event) => updateCourtSetting('division3', event.target.value)} placeholder="例：Cコート" /></label>
+              </div>
             </div>
             <div className="rule-strip">
               <div><strong>32</strong><span>参加チーム</span></div><ChevronRight />
@@ -967,7 +1031,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           <TabsContent value="schedule" className="panel panel--wide">
             <div className="panel-heading">
-              <div><span>{tournamentContext} · 全49試合</span><h2>大会進行表</h2><p>{isAdmin ? '開始時刻とコートを入力すると、参加者画面へ自動で反映されます。' : '全部門の開始時刻、コート、対戦状況を確認できます。'}</p></div>
+              <div><span>{tournamentContext} · 全49試合</span><h2>大会進行表</h2><p>{isAdmin ? '部門コートは大会設定から自動反映され、必要な試合だけ個別変更できます。' : '全部門の開始時刻、コート、対戦状況を確認できます。'}</p></div>
               <Timer size={30} />
             </div>
             <ScheduleBoard tournament={activeTournament} editable={isAdmin} onChange={updateSchedule} />
