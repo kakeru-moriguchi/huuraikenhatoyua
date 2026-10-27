@@ -42,11 +42,12 @@ export type TournamentState = {
     3: BracketState;
   };
   courts: CourtSettings;
+  practiceCourts: Record<string, string>;
   schedule: TournamentSchedule;
 };
 
 export type AppState = {
-  version: 5;
+  version: 6;
   tournaments: Record<TournamentDayId, TournamentState>;
 };
 
@@ -78,6 +79,13 @@ export function applyDivisionCourt(
     id,
     belongsToDivision(id) ? { ...schedule[id], court } : schedule[id],
   ])) as TournamentSchedule;
+}
+
+function normalizePracticeCourts(value?: Record<string, unknown>): Record<string, string> {
+  if (!value || typeof value !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  );
 }
 
 function normalizeCourts(value?: Partial<CourtSettings>): CourtSettings {
@@ -123,13 +131,14 @@ export function createTournament(category: string, name: string): TournamentStat
       3: createEmptyBracket(),
     },
     courts: normalizeCourts(),
+    practiceCourts: {},
     schedule: createEmptySchedule(),
   };
 }
 
 export function createInitialAppState(): AppState {
   return {
-    version: 5,
+    version: 6,
     tournaments: {
       day1: createTournament('男子', '男子・3部制トーナメント'),
       day2: createTournament('女子', '女子・3部制トーナメント'),
@@ -159,6 +168,7 @@ export function normalizeTournament(
       3: normalizeBracket(value?.divisions?.[3]),
     },
     courts: normalizeCourts(value?.courts),
+    practiceCourts: normalizePracticeCourts(value?.practiceCourts),
     schedule: normalizeSchedule(value?.schedule),
   };
 }
@@ -166,7 +176,7 @@ export function normalizeTournament(
 export function normalizeAppState(value?: Partial<AppState>): AppState {
   const fallback = createInitialAppState();
   return {
-    version: 5,
+    version: 6,
     tournaments: {
       day1: normalizeTournament(value?.tournaments?.day1, fallback.tournaments.day1),
       day2: normalizeTournament(value?.tournaments?.day2, fallback.tournaments.day2),

@@ -92,11 +92,14 @@ void test('1日目と2日目の大会データは完全に独立している', (
   state.tournaments.day1.divisions[2].A.scores.M01 = { a: '3', b: '1' };
   state.tournaments.day1.schedule['D1-M01'] = { startTime: '09:30', court: 'Aコート' };
   state.tournaments.day1.courts.practice = '練習A';
+  state.tournaments.day1.practiceCourts['男子チーム'] = '第4コート';
 
   assert.equal(state.tournaments.day2.divisions[1].teams[0], '');
   assert.deepEqual(state.tournaments.day2.divisions[2].A.scores.M01, { a: '', b: '' });
   assert.deepEqual(state.tournaments.day2.schedule['D1-M01'], { startTime: '', court: '' });
   assert.equal(state.tournaments.day2.courts.practice, '');
+  assert.deepEqual(state.tournaments.day2.practiceCourts, {});
+  assert.equal(state.tournaments.day1.practiceCourts['男子チーム'], '第4コート');
   assert.equal(state.tournaments.day1.category, '男子');
   assert.equal(state.tournaments.day2.category, '女子');
 });
@@ -110,9 +113,10 @@ void test('各大会に49試合分の進行表があり、旧データには空�
   const tournaments = legacyLike.tournaments as Record<string, Record<string, unknown>>;
   delete tournaments.day1.schedule;
   const normalized = normalizeAppState(legacyLike as never);
-  assert.equal(normalized.version, 5);
+  assert.equal(normalized.version, 6);
   assert.deepEqual(normalized.tournaments.day1.schedule['D2-A-M09'], { startTime: '', court: '' });
   assert.deepEqual(normalized.tournaments.day1.courts, { practice: '', division1: '', division2: '', division3: '' });
+  assert.deepEqual(normalized.tournaments.day1.practiceCourts, {});
 });
 
 void test('部門コートは該当する進行表だけへ一括反映する', () => {

@@ -89,7 +89,8 @@ declare global {
   }
 }
 
-const STORAGE_KEY = 'three-match-tournament-v5';
+const STORAGE_KEY = 'three-match-tournament-v6';
+const VERSION_FIVE_STORAGE_KEY = 'three-match-tournament-v5';
 const VERSION_FOUR_STORAGE_KEY = 'three-match-tournament-v4';
 const VERSION_THREE_STORAGE_KEY = 'three-match-tournament-v3';
 const PREVIOUS_STORAGE_KEY = 'three-match-tournament-v2';
@@ -384,12 +385,13 @@ function TournamentSelector({
   );
 }
 
-function CourtGuide({ courts }: { courts: CourtSettings }) {
+function CourtGuide({ tournament }: { tournament: TournamentState }) {
+  const assignedCount = Object.values(tournament.practiceCourts).filter(Boolean).length;
   const items = [
-    ['練習コート', courts.practice],
-    ['1部', courts.division1],
-    ['2部', courts.division2],
-    ['3部', courts.division3],
+    ['練習コート', assignedCount ? `${assignedCount}チーム設定済み` : 'チーム別設定'],
+    ['1部', tournament.courts.division1],
+    ['2部', tournament.courts.division2],
+    ['3部', tournament.courts.division3],
   ];
 
   return (
@@ -532,6 +534,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   useEffect(() => {
     if (!isAdmin) return;
     const saved = localStorage.getItem(STORAGE_KEY);
+    const versionFive = localStorage.getItem(VERSION_FIVE_STORAGE_KEY);
     const versionFour = localStorage.getItem(VERSION_FOUR_STORAGE_KEY);
     const versionThree = localStorage.getItem(VERSION_THREE_STORAGE_KEY);
     const previous = localStorage.getItem(PREVIOUS_STORAGE_KEY);
@@ -540,6 +543,8 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     try {
       if (saved) {
         hydratedState = normalizeAppState(JSON.parse(saved) as Partial<AppState>);
+      } else if (versionFive) {
+        hydratedState = normalizeAppState(JSON.parse(versionFive) as Partial<AppState>);
       } else if (versionFour) {
         hydratedState = normalizeAppState(JSON.parse(versionFour) as Partial<AppState>);
       } else if (versionThree) {
@@ -667,6 +672,22 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     });
   };
 
+  const updatePracticeCourt = (team: string, court: string) => {
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            practiceCourts: { ...tournament.practiceCourts, [team]: court },
+          },
+        },
+      };
+    });
+  };
+
   const updateMainBracket = (day: TournamentDayId, id: 1 | 3, change: (bracket: BracketState) => BracketState) => {
     applyState((previous) => {
       const tournament = previous.tournaments[day];
@@ -702,6 +723,12 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   };
 
   const activeTournament = state.tournaments[activeDay];
+  const practiceGroups: Array<{ label: string; teams: string[] }> = [
+    { label: '1部', teams: activeTournament.divisions[1].teams },
+    { label: '2部 Aブロック', teams: activeTournament.divisions[2].A.teams },
+    { label: '2部 Bブロック', teams: activeTournament.divisions[2].B.teams },
+    { label: '3部', teams: activeTournament.divisions[3].teams },
+  ].map((group) => ({ ...group, teams: group.teams.map((team) => team.trim()).filter(Boolean) }));
   const selectedBlock: BlockId = d2View === 'B' ? 'B' : 'A';
   const activeBracket = division === 2 ? activeTournament.divisions[2][selectedBlock] : activeTournament.divisions[division];
   const activeResolved = useMemo(() => resolveTournament(activeBracket), [activeBracket]);
@@ -807,6 +834,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     applyState(localImport);
     setLocalImport(null);
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(VERSION_FIVE_STORAGE_KEY);
     localStorage.removeItem(VERSION_FOUR_STORAGE_KEY);
     localStorage.removeItem(VERSION_THREE_STORAGE_KEY);
     localStorage.removeItem(PREVIOUS_STORAGE_KEY);
@@ -925,7 +953,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           }}
         />
 
-        <CourtGuide courts={activeTournament.courts} />
+        <CourtGuide tournament={activeTournament} />
 
         <section className="overview" aria-label="大会進行状況">
           <div className="overview-copy">
@@ -966,7 +994,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
                 <p>部門コートを変更すると、その部の全試合へ自動反映されます。進行表では試合ごとの変更も可能です。</p>
               </div>
               <div className="court-settings__grid">
-                <label htmlFor="practice-court"><span>練習コート</span><Input id="practice-court" value={activeTournament.courts.practice} onChange={(event) => updateCourtSetting('practice', event.target.value)} placeholder="例：第4コート" /></label>
+
                 <label htmlFor="division1-court"><span>1部 使用コート</span><Input id="division1-court" value={activeTournament.courts.division1} onChange={(event) => updateCourtSetting('division1', event.target.value)} placeholder="例：Aコート" /></label>
                 <label htmlFor="division2-court"><span>2部 使用コート</span><Input id="division2-court" value={activeTournament.courts.division2} onChange={(event) => updateCourtSetting('division2', event.target.value)} placeholder="例：Bコート" /></label>
                 <label htmlFor="division3-court"><span>3部 使用コート</span><Input id="division3-court" value={activeTournament.courts.division3} onChange={(event) => updateCourtSetting('division3', event.target.value)} placeholder="例：Cコート" /></label>
@@ -1044,14 +1072,26 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           <TabsContent value="practice" className="panel">
             <div className="panel-heading">
-              <div><span>{tournamentContext}</span><h2>練習コート</h2><p>選択中の開催日の練習コートを確認できます。</p></div>
+              <div><span>{tournamentContext}</span><h2>チーム別 練習コート</h2><p>{isAdmin ? '登録済みの各チームへ練習コートを割り当てます。' : 'チームごとの練習コートを確認できます。'}</p></div>
               <MapPin size={30} />
             </div>
-            <div className="practice-court-card">
-              <MapPin size={34} />
-              <div><span>{activeTournament.category || tournamentContext} 練習コート</span><strong>{activeTournament.courts.practice || '未設定'}</strong></div>
+            <div className="practice-court-groups">
+              {practiceGroups.map((group) => (
+                <section className="practice-court-group" key={group.label}>
+                  <div className="practice-court-group__head"><h3>{group.label}</h3><span>{group.teams.length}チーム</span></div>
+                  {group.teams.length ? <div className="practice-court-list">
+                    {group.teams.map((team, index) => (
+                      <div className="practice-court-row" key={`${group.label}-${team}-${index}`}>
+                        <strong>{team}</strong>
+                        {isAdmin
+                          ? <Input aria-label={`${team}の練習コート`} value={activeTournament.practiceCourts[team] || ''} maxLength={24} placeholder="例：第4コート" onChange={(event) => updatePracticeCourt(team, event.target.value)} />
+                          : <span><MapPin size={15} />{activeTournament.practiceCourts[team] || '未設定'}</span>}
+                      </div>
+                    ))}
+                  </div> : <p className="practice-court-empty">チーム未登録</p>}
+                </section>
+              ))}
             </div>
-            {isAdmin ? <div className="panel-actions"><Button onClick={() => setActiveTab('setup')}>大会設定で変更 <ArrowRight size={16} /></Button></div> : null}
           </TabsContent>
 
           {isAdmin ? <TabsContent value="scores" className="panel panel--wide">
