@@ -1,4 +1,4 @@
-import type { AppState } from '@/lib/event';
+import { normalizeAppState, type AppState } from '@/lib/event';
 
 type TournamentSnapshot = {
   state: AppState;
@@ -52,7 +52,7 @@ async function bridgeRequest(method: 'GET' | 'POST', query: string, body?: unkno
 export async function getVercelTournamentSnapshot(): Promise<TournamentSnapshot> {
   const result = await bridgeRequest('GET', '?action=tournament');
   if (!result.snapshot) throw new Error('Sites bridge returned no tournament data.');
-  return result.snapshot;
+  return { ...result.snapshot, state: normalizeAppState(result.snapshot.state) };
 }
 
 export async function isVercelPasswordConfigured(): Promise<boolean> {
@@ -79,6 +79,6 @@ export async function saveVercelTournament(state: unknown, token: string | undef
   if (!token) throw new Error('管理者パスワードを入力してください。');
   const result = await bridgeRequest('POST', '', { action: 'save', state, token, email });
   if (!result.snapshot) throw new Error('Sites bridge returned no tournament data.');
-  return result.snapshot;
+  return { ...result.snapshot, state: normalizeAppState(result.snapshot.state) };
 }
 
