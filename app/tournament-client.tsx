@@ -706,6 +706,24 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
       };
     });
   };
+  const updateTeamPracticeTime = (team: string, field: 'start' | 'end', value: string) => {
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            teamPracticeTimes: {
+              ...tournament.teamPracticeTimes,
+              [team]: { start: '', end: '', ...tournament.teamPracticeTimes[team], [field]: value },
+            },
+          },
+        },
+      };
+    });
+  };
 
   const updateMainBracket = (day: TournamentDayId, id: 1 | 3, change: (bracket: BracketState) => BracketState) => {
     applyState((previous) => {
@@ -1091,7 +1109,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           <TabsContent value="practice" className="panel">
             <div className="panel-heading">
-              <div><span>{tournamentContext}</span><h2>チーム別 練習コート</h2><p>{isAdmin ? '登録済みの各チームへ練習コートを割り当てます。' : 'チームごとの練習コートを確認できます。'}</p></div>
+              <div><span>{tournamentContext}</span><h2>チーム別 練習コート</h2><p>{isAdmin ? '各部の時間と、チームごとのコート・個別時間を設定します。個別時間が空欄なら各部の時間を表示します。' : 'チームごとの練習コートと時間を確認できます。'}</p></div>
               <MapPin size={30} />
             </div>
             <div className="practice-court-groups">
@@ -1111,6 +1129,11 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
                         {isAdmin
                           ? <Input aria-label={`${team}の練習コート`} value={activeTournament.practiceCourts[team] || ''} maxLength={24} placeholder="例：第4コート" onChange={(event) => updatePracticeCourt(team, event.target.value)} />
                           : <span><MapPin size={15} />{activeTournament.practiceCourts[team] || '未設定'}</span>}
+                        {isAdmin ? <div className="practice-court-row__time">
+                          <label>開始 <Input aria-label={`${team}の練習開始時刻`} type="time" value={activeTournament.teamPracticeTimes[team]?.start || ''} onChange={(event) => updateTeamPracticeTime(team, 'start', event.target.value)} /></label>
+                          <span>～</span>
+                          <label>終了 <Input aria-label={`${team}の練習終了時刻`} type="time" value={activeTournament.teamPracticeTimes[team]?.end || ''} onChange={(event) => updateTeamPracticeTime(team, 'end', event.target.value)} /></label>
+                        </div> : <span className="practice-court-row__time--read"><Timer size={15} />{activeTournament.teamPracticeTimes[team]?.start || activeTournament.practiceTimes[group.id].start || '未設定'}～{activeTournament.teamPracticeTimes[team]?.end || activeTournament.practiceTimes[group.id].end || '未設定'}</span>}
                       </div>
                     ))}
                   </div> : <p className="practice-court-empty">チーム未登録</p>}

@@ -21,6 +21,19 @@ export type PracticeGroupId = 'division1' | 'division2A' | 'division2B' | 'divis
 export type PracticeTime = { start: string; end: string };
 export type PracticeTimes = Record<PracticeGroupId, PracticeTime>;
 
+function normalizeTeamPracticeTimes(value?: Record<string, unknown>): Record<string, PracticeTime> {
+  if (!value || typeof value !== 'object') return {};
+  return Object.fromEntries(Object.entries(value)
+    .filter(([, time]) => time && typeof time === 'object')
+    .map(([team, time]) => {
+      const entry = time as Record<string, unknown>;
+      return [team, {
+        start: typeof entry.start === 'string' ? entry.start : '',
+        end: typeof entry.end === 'string' ? entry.end : '',
+      }];
+    }));
+}
+
 export function createEmptyPracticeTimes(): PracticeTimes {
   return {
     division1: { start: '', end: '' },
@@ -64,6 +77,7 @@ export type TournamentState = {
   courts: CourtSettings;
   practiceCourts: Record<string, string>;
   practiceTimes: PracticeTimes;
+  teamPracticeTimes: Record<string, PracticeTime>;
   schedule: TournamentSchedule;
 };
 
@@ -154,6 +168,7 @@ export function createTournament(category: string, name: string): TournamentStat
     courts: normalizeCourts(),
     practiceCourts: {},
     practiceTimes: createEmptyPracticeTimes(),
+    teamPracticeTimes: {},
     schedule: createEmptySchedule(),
   };
 }
@@ -192,6 +207,7 @@ export function normalizeTournament(
     courts: normalizeCourts(value?.courts),
     practiceCourts: normalizePracticeCourts(value?.practiceCourts),
     practiceTimes: normalizePracticeTimes(value?.practiceTimes),
+    teamPracticeTimes: normalizeTeamPracticeTimes(value?.teamPracticeTimes),
     schedule: normalizeSchedule(value?.schedule),
   };
 }
