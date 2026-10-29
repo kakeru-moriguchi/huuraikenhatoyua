@@ -945,7 +945,6 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     <main className={`app-shell app-shell--${activeDay}`}>
       <header className="topbar">
         <div className="brand-lockup">
-          <span className="brand-mark"><Trophy size={20} /></span>
           <div><p className="eyebrow">{isAdmin ? '管理者画面' : '参加者画面'} · {tournamentContext}</p><h1>{activeTournament.name || '大会名未設定'}</h1></div>
         </div>
         <div className="topbar-actions">
