@@ -523,7 +523,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   const [state, setState] = useState<AppState>(initialState);
   const [activeDay, setActiveDay] = useState<TournamentDayId>('day1');
   const [division, setDivision] = useState<DivisionId>(1);
-  const [activeTab, setActiveTab] = useState(mode === 'admin' ? 'setup' : 'bracket');
+  const [activeTab, setActiveTab] = useState(mode === 'admin' ? 'setup' : 'practice');
   const [d2View, setD2View] = useState<BlockId | 'grand'>('A');
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -1009,11 +1009,12 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="workspace">
           <TabsList className={`step-nav ${isAdmin ? '' : 'step-nav--viewer'}`} aria-label={isAdmin ? '大会管理メニュー' : '大会結果メニュー'}>
+            {!isAdmin ? <TabsTrigger value="practice"><MapPin size={16} /><span>練習コート</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="setup"><Settings2 size={16} /><span>大会設定</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="teams"><Users size={16} /><span>チーム登録</span><em>{currentTeamCount}/{currentTeamTarget}</em></TabsTrigger> : null}
             <TabsTrigger value="bracket"><Shield size={16} /><span>トーナメント</span></TabsTrigger>
             <TabsTrigger value="schedule"><Timer size={16} /><span>進行表</span></TabsTrigger>
-            <TabsTrigger value="practice"><MapPin size={16} /><span>練習コート</span></TabsTrigger>
+            {isAdmin ? <TabsTrigger value="practice"><MapPin size={16} /><span>練習コート</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="scores"><CircleDot size={16} /><span>結果入力</span><em>{currentCompleted}/{currentMatchTarget}</em></TabsTrigger> : null}
             <TabsTrigger value="ranking"><Medal size={16} /><span>最終順位</span></TabsTrigger>
           </TabsList>
