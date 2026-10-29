@@ -93,6 +93,7 @@ void test('1日目と2日目の大会データは完全に独立している', (
   state.tournaments.day1.schedule['D1-M01'] = { startTime: '09:30', court: 'Aコート' };
   state.tournaments.day1.courts.practice = '練習A';
   state.tournaments.day1.practiceCourts['男子チーム'] = '第4コート';
+  state.tournaments.day1.practiceTimes.division1 = { start: '09:00', end: '10:30' };
 
   assert.equal(state.tournaments.day2.divisions[1].teams[0], '');
   assert.deepEqual(state.tournaments.day2.divisions[2].A.scores.M01, { a: '', b: '' });
@@ -100,6 +101,8 @@ void test('1日目と2日目の大会データは完全に独立している', (
   assert.equal(state.tournaments.day2.courts.practice, '');
   assert.deepEqual(state.tournaments.day2.practiceCourts, {});
   assert.equal(state.tournaments.day1.practiceCourts['男子チーム'], '第4コート');
+  assert.deepEqual(state.tournaments.day1.practiceTimes.division1, { start: '09:00', end: '10:30' });
+  assert.deepEqual(state.tournaments.day2.practiceTimes.division1, { start: '', end: '' });
   assert.equal(state.tournaments.day1.category, '男子');
   assert.equal(state.tournaments.day2.category, '女子');
 });
@@ -112,11 +115,13 @@ void test('各大会に49試合分の進行表があり、旧データには空�
   const legacyLike = structuredClone(current) as unknown as Record<string, unknown>;
   const tournaments = legacyLike.tournaments as Record<string, Record<string, unknown>>;
   delete tournaments.day1.schedule;
+  delete tournaments.day1.practiceTimes;
   const normalized = normalizeAppState(legacyLike as never);
   assert.equal(normalized.version, 6);
   assert.deepEqual(normalized.tournaments.day1.schedule['D2-A-M09'], { startTime: '', court: '' });
   assert.deepEqual(normalized.tournaments.day1.courts, { practice: '', division1: '', division2: '', division3: '' });
   assert.deepEqual(normalized.tournaments.day1.practiceCourts, {});
+  assert.deepEqual(normalized.tournaments.day1.practiceTimes.division2A, { start: '', end: '' });
 });
 
 void test('部門コートは該当する進行表だけへ一括反映する', () => {
@@ -149,4 +154,3 @@ void test('従来の大会データは1日目へ移行し2日目は初期状態�
   assert.deepEqual(migrated.tournaments.day1.divisions[2].grandFinal, { a: '2', b: '1' });
   assert.equal(migrated.tournaments.day2.divisions[1].teams[0], '');
 });
-

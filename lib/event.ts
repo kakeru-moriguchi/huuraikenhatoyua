@@ -17,6 +17,26 @@ export type CourtSettings = {
   division2: string;
   division3: string;
 };
+export type PracticeGroupId = 'division1' | 'division2A' | 'division2B' | 'division3';
+export type PracticeTime = { start: string; end: string };
+export type PracticeTimes = Record<PracticeGroupId, PracticeTime>;
+
+export function createEmptyPracticeTimes(): PracticeTimes {
+  return {
+    division1: { start: '', end: '' },
+    division2A: { start: '', end: '' },
+    division2B: { start: '', end: '' },
+    division3: { start: '', end: '' },
+  };
+}
+
+function normalizePracticeTimes(value?: Partial<Record<PracticeGroupId, Partial<PracticeTime>>>): PracticeTimes {
+  const empty = createEmptyPracticeTimes();
+  return Object.fromEntries((Object.keys(empty) as PracticeGroupId[]).map((id) => [id, {
+    start: typeof value?.[id]?.start === 'string' ? value[id].start : '',
+    end: typeof value?.[id]?.end === 'string' ? value[id].end : '',
+  }])) as PracticeTimes;
+}
 
 export const SCHEDULE_MATCH_IDS: ScheduleMatchId[] = [
   ...MATCH_IDS.map((id) => `D1-${id}` as const),
@@ -43,6 +63,7 @@ export type TournamentState = {
   };
   courts: CourtSettings;
   practiceCourts: Record<string, string>;
+  practiceTimes: PracticeTimes;
   schedule: TournamentSchedule;
 };
 
@@ -132,6 +153,7 @@ export function createTournament(category: string, name: string): TournamentStat
     },
     courts: normalizeCourts(),
     practiceCourts: {},
+    practiceTimes: createEmptyPracticeTimes(),
     schedule: createEmptySchedule(),
   };
 }
@@ -169,6 +191,7 @@ export function normalizeTournament(
     },
     courts: normalizeCourts(value?.courts),
     practiceCourts: normalizePracticeCourts(value?.practiceCourts),
+    practiceTimes: normalizePracticeTimes(value?.practiceTimes),
     schedule: normalizeSchedule(value?.schedule),
   };
 }
@@ -209,4 +232,3 @@ export function migratePreviousState(value: PreviousAppState, version: 1 | 2): A
 
   return migrated;
 }
-

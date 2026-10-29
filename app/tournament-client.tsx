@@ -64,6 +64,7 @@ import {
   type CourtSettings,
   type DivisionId,
   type DivisionTwoState,
+  type PracticeGroupId,
   type PreviousAppState,
   type ScheduleEntry,
   type ScheduleMatchId,
@@ -687,6 +688,24 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
       };
     });
   };
+  const updatePracticeTime = (group: PracticeGroupId, field: 'start' | 'end', value: string) => {
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            practiceTimes: {
+              ...tournament.practiceTimes,
+              [group]: { ...tournament.practiceTimes[group], [field]: value },
+            },
+          },
+        },
+      };
+    });
+  };
 
   const updateMainBracket = (day: TournamentDayId, id: 1 | 3, change: (bracket: BracketState) => BracketState) => {
     applyState((previous) => {
@@ -723,11 +742,11 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   };
 
   const activeTournament = state.tournaments[activeDay];
-  const practiceGroups: Array<{ label: string; teams: string[] }> = [
-    { label: '1部', teams: activeTournament.divisions[1].teams },
-    { label: '2部 Aブロック', teams: activeTournament.divisions[2].A.teams },
-    { label: '2部 Bブロック', teams: activeTournament.divisions[2].B.teams },
-    { label: '3部', teams: activeTournament.divisions[3].teams },
+  const practiceGroups: Array<{ id: PracticeGroupId; label: string; teams: string[] }> = [
+    { id: 'division1', label: '1部', teams: activeTournament.divisions[1].teams },
+    { id: 'division2A', label: '2部 Aブロック', teams: activeTournament.divisions[2].A.teams },
+    { id: 'division2B', label: '2部 Bブロック', teams: activeTournament.divisions[2].B.teams },
+    { id: 'division3', label: '3部', teams: activeTournament.divisions[3].teams },
   ].map((group) => ({ ...group, teams: group.teams.map((team) => team.trim()).filter(Boolean) }));
   const selectedBlock: BlockId = d2View === 'B' ? 'B' : 'A';
   const activeBracket = division === 2 ? activeTournament.divisions[2][selectedBlock] : activeTournament.divisions[division];
@@ -1079,6 +1098,12 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               {practiceGroups.map((group) => (
                 <section className="practice-court-group" key={group.label}>
                   <div className="practice-court-group__head"><h3>{group.label}</h3><span>{group.teams.length}チーム</span></div>
+                  {isAdmin ? <div className="practice-court-group__time">
+                    <strong>練習時間</strong>
+                    <label>開始 <Input aria-label={`${group.label}の練習開始時刻`} type="time" value={activeTournament.practiceTimes[group.id].start} onChange={(event) => updatePracticeTime(group.id, 'start', event.target.value)} /></label>
+                    <span>～</span>
+                    <label>終了 <Input aria-label={`${group.label}の練習終了時刻`} type="time" value={activeTournament.practiceTimes[group.id].end} onChange={(event) => updatePracticeTime(group.id, 'end', event.target.value)} /></label>
+                  </div> : <p className="practice-court-group__time practice-court-group__time--read"><Timer size={16} /> 練習時間：{activeTournament.practiceTimes[group.id].start || '未設定'}～{activeTournament.practiceTimes[group.id].end || '未設定'}</p>}
                   {group.teams.length ? <div className="practice-court-list">
                     {group.teams.map((team, index) => (
                       <div className="practice-court-row" key={`${group.label}-${team}-${index}`}>
@@ -1129,4 +1154,3 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     </main>
   );
 }
-
