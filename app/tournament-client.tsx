@@ -78,6 +78,7 @@ import {
   type TournamentState,
 } from '@/lib/event';
 import type { PendingResult } from '@/lib/result-submission';
+import { LEAGUE_MATCHES, LEAGUE_MATCH_IDS, leagueMatch, leagueStandings, reconcileLeagueScores, type LeagueMatchId, type LeagueState } from '@/lib/league';
 
 declare global {
   interface Document {
@@ -124,7 +125,7 @@ type ScheduleRow = {
   winner: string;
 };
 
-function scheduleRows(tournament: TournamentState, division: DivisionId): ScheduleRow[] {
+function scheduleRows(tournament: TournamentState, division: DivisionId, day: TournamentDayId): ScheduleRow[] {
   const rows: ScheduleRow[] = [];
   const addBracket = (prefix: 'D1' | 'D2-A' | 'D2-B' | 'D3', section: string, bracket: BracketState) => {
     const resolved = resolveTournament(bracket);
@@ -158,22 +159,33 @@ function scheduleRows(tournament: TournamentState, division: DivisionId): Schedu
       winner: grandFinal.winner,
     });
   }
-  if (division === 3) addBracket('D3', '3部', tournament.divisions[3]);
+  if (division === 3 && day === 'day1') addBracket('D3', '3部', tournament.divisions[3]);
+  if (division === 3 && day === 'day2') {
+    for (const match of LEAGUE_MATCHES) {
+      const detail = leagueMatch(tournament.league3, match);
+      rows.push({
+        id: `D3-${match.id}`, section: `3部 第${match.round}節`, title: `第${match.round}節 ${match.id}`,
+        teamA: detail.teamA, teamB: detail.teamB, score: detail.score, winner: detail.winner,
+      });
+    }
+  }
   return rows;
 }
 
 function ScheduleBoard({
   tournament,
   division,
+  day,
   editable,
   onChange,
 }: {
   tournament: TournamentState;
   division: DivisionId;
+  day: TournamentDayId;
   editable: boolean;
   onChange: (id: ScheduleMatchId, change: Partial<ScheduleEntry>) => void;
 }) {
-  const rows = useMemo(() => scheduleRows(tournament, division), [tournament, division]);
+  const rows = useMemo(() => scheduleRows(tournament, division, day), [tournament, division, day]);
   const sections = [...new Set(rows.map((row) => row.section))];
 
   return <div className="schedule-board">
@@ -391,6 +403,44 @@ function RankingList({ bracket, compact = false }: { bracket: BracketState; comp
   );
 }
 
+function LeagueBoard({ league, editable, onGame }: {
+  league: LeagueState;
+  editable: boolean;
+  onGame: (id: LeagueMatchId, index: number, side: 'a' | 'b', value: string) => void;
+}) {
+  return <div className="score-rounds">
+    {[1, 2, 3, 4, 5].map((round) => <section key={round}>
+      <div className="round-title"><span>ROUND {round}</span><strong>第{round}節</strong></div>
+      <div className="score-grid">
+        {LEAGUE_MATCHES.filter((match) => match.round === round).map((match) => {
+          const { teamA, teamB, score, winner } = leagueMatch(league, match);
+          const ready = Boolean(teamA && teamB && teamA !== teamB);
+          return <article className={`match-card ${winner ? 'match-card--complete' : ''}`} key={match.id}>
+            <div className="match-card__head"><div><span className="match-id">D3-{match.id}</span><h3>第{round}節</h3></div><span className={`status ${winner ? 'status--done' : ready ? 'status--ready' : ''}`}>{winner ? '確定' : ready ? '入力待ち' : '対戦待ち'}</span></div>
+            {(['a', 'b'] as const).map((side) => <div className={`team-row ${winner && winner === (side === 'a' ? teamA : teamB) ? 'team-row--winner' : ''}`} key={side}>
+              <div className="team-name"><strong>{(side === 'a' ? teamA : teamB) || '未定'}</strong></div>
+              <span className="score-display">{score[side] || '—'}</span>
+            </div>)}
+            <GameDetails games={score.games} teamA={teamA} teamB={teamB} editable={editable} ready={ready} onChange={(index, side, value) => onGame(match.id, index, side, value)} />
+          </article>;
+        })}
+      </div>
+    </section>)}
+  </div>;
+}
+
+function LeagueStandings({ league }: { league: LeagueState }) {
+  const standings = leagueStandings(league);
+  return <div className="league-standings">
+    <p className="hint">順位基準：団体戦の勝数 → 対戦の得失差 → ゲームの得失差。同じ場合は同率です。</p>
+    <div className="league-standings__head"><span>順位</span><span>チーム</span><span>試合</span><span>勝</span><span>敗</span><span>対戦差</span><span>ゲーム差</span></div>
+    {standings.map((row, index) => <div className="league-standings__row" key={`${row.team}-${index}`}>
+      <strong>{row.rank}位</strong><strong>{row.team}</strong><span>{row.played}</span><span>{row.wins}</span><span>{row.losses}</span><span>{row.matchDiff > 0 ? '+' : ''}{row.matchDiff}</span><span>{row.gameDiff > 0 ? '+' : ''}{row.gameDiff}</span>
+    </div>)}
+    {!standings.length ? <p className="grand-final-note">チームを登録すると順位表を表示します。</p> : null}
+  </div>;
+}
+
 function formatTournamentDate(date: string) {
   if (!date) return '日付未設定';
   const [year, month, day] = date.split('-');
@@ -449,24 +499,26 @@ function CourtGuide({ tournament }: { tournament: TournamentState }) {
 function DivisionSelector({
   division,
   tournament,
+  day,
   onChange,
 }: {
   division: DivisionId;
   tournament: TournamentState;
+  day: TournamentDayId;
   onChange: (division: DivisionId) => void;
 }) {
   const counts = {
     1: tournament.divisions[1].teams.filter(Boolean).length,
     2: tournament.divisions[2].A.teams.filter(Boolean).length + tournament.divisions[2].B.teams.filter(Boolean).length,
-    3: tournament.divisions[3].teams.filter(Boolean).length,
+    3: (day === 'day2' ? tournament.league3.teams : tournament.divisions[3].teams).filter(Boolean).length,
   };
   return (
     <nav className="division-nav" aria-label="部門切替">
       {([1, 2, 3] as const).map((id) => (
         <button type="button" aria-pressed={division === id} key={id} onClick={() => onChange(id)}>
           <span>{id}部</span>
-          <strong>{id === 2 ? 'A / Bブロック' : '8チーム'}</strong>
-          <em>{counts[id]} / {id === 2 ? 16 : 8}</em>
+          <strong>{id === 2 ? 'A / Bブロック' : id === 3 && day === 'day2' ? '6チーム総当たり' : '8チーム'}</strong>
+          <em>{counts[id]} / {id === 2 ? 16 : id === 3 && day === 'day2' ? 6 : 8}</em>
         </button>
       ))}
     </nav>
@@ -885,31 +937,44 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     { id: 'division1', label: '1部', teams: activeTournament.divisions[1].teams },
     { id: 'division2A', label: '2部 Aブロック', teams: activeTournament.divisions[2].A.teams },
     { id: 'division2B', label: '2部 Bブロック', teams: activeTournament.divisions[2].B.teams },
-    { id: 'division3', label: '3部', teams: activeTournament.divisions[3].teams },
+    { id: 'division3', label: '3部', teams: (activeDay === 'day2' ? activeTournament.league3.teams : activeTournament.divisions[3].teams) },
   ].map((group) => ({ ...group, id: group.id as PracticeGroupId, teams: group.teams.map((team) => team.trim()).filter(Boolean) }));
   const selectedBlock: BlockId = d2View === 'B' ? 'B' : 'A';
+  const isFemaleLeague = activeDay === 'day2' && division === 3;
   const activeBracket = division === 2 ? activeTournament.divisions[2][selectedBlock] : activeTournament.divisions[division];
   const activeResolved = useMemo(() => resolveTournament(activeBracket), [activeBracket]);
-  const activeTeamCount = activeBracket.teams.filter((team) => team.trim()).length;
+  const activeTeams = isFemaleLeague ? activeTournament.league3.teams : activeBracket.teams;
+  const activeTeamCount = activeTeams.filter((team) => team.trim()).length;
   const d2TeamCount = activeTournament.divisions[2].A.teams.filter(Boolean).length + activeTournament.divisions[2].B.teams.filter(Boolean).length;
   const grandFinalTeams = blockChampions(activeTournament.divisions[2]);
   const grandFinalResolved = resolveGrandFinal(grandFinalTeams, activeTournament.divisions[2].grandFinal);
   const currentTeamCount = division === 2 ? d2TeamCount : activeTeamCount;
-  const currentTeamTarget = division === 2 ? 16 : 8;
+  const currentTeamTarget = division === 2 ? 16 : isFemaleLeague ? 6 : 8;
   const blockCompleted = MATCH_IDS.filter((id) => Boolean(activeResolved[id].winner)).length;
+  const leagueCompleted = LEAGUE_MATCHES.filter((match) => Boolean(leagueMatch(activeTournament.league3, match).winner)).length;
   const divisionTwoCompleted =
     MATCH_IDS.filter((id) => Boolean(resolveTournament(activeTournament.divisions[2].A)[id].winner)).length +
     MATCH_IDS.filter((id) => Boolean(resolveTournament(activeTournament.divisions[2].B)[id].winner)).length +
     (grandFinalResolved.winner ? 1 : 0);
-  const currentCompleted = division === 2 ? divisionTwoCompleted : blockCompleted;
-  const currentMatchTarget = division === 2 ? 25 : 12;
-  const randomDrawReady = division === 2 ? d2TeamCount === 16 : activeTeamCount === 8;
-  const randomDrawHasResults = division === 2
+  const currentCompleted = division === 2 ? divisionTwoCompleted : isFemaleLeague ? leagueCompleted : blockCompleted;
+  const currentMatchTarget = division === 2 ? 25 : isFemaleLeague ? 15 : 12;
+  const randomDrawReady = division === 2 ? d2TeamCount === 16 : activeTeamCount === currentTeamTarget && (!isFemaleLeague || new Set(activeTeams.map((team) => team.trim())).size === 6);
+  const randomDrawHasResults = isFemaleLeague ? LEAGUE_MATCH_IDS.some((id) => scoreHasInput(activeTournament.league3.scores[id])) : division === 2
     ? [...MATCH_IDS.map((id) => activeTournament.divisions[2].A.scores[id]), ...MATCH_IDS.map((id) => activeTournament.divisions[2].B.scores[id]), activeTournament.divisions[2].grandFinal]
       .some(scoreHasInput)
     : MATCH_IDS.some((id) => scoreHasInput(activeBracket.scores[id]));
 
   const updateTeam = (index: number, value: string) => {
+    if (isFemaleLeague) {
+      applyState((previous) => {
+        const tournament = previous.tournaments.day2;
+        const current = tournament.league3;
+        const teams = [...current.teams];
+        teams[index] = value;
+        return { ...previous, tournaments: { ...previous.tournaments, day2: { ...tournament, league3: reconcileLeagueScores(current, { ...current, teams }) } } };
+      });
+      return;
+    }
     const change = (bracket: BracketState) => {
       const teams = [...bracket.teams];
       teams[index] = value;
@@ -921,7 +986,13 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
   const randomizeDraw = () => {
     if (!randomDrawReady) return;
-    if (division === 2) {
+    if (isFemaleLeague) {
+      applyState((previous) => {
+        const tournament = previous.tournaments.day2;
+        const current = tournament.league3;
+        return { ...previous, tournaments: { ...previous.tournaments, day2: { ...tournament, league3: reconcileLeagueScores(current, { ...current, teams: shuffleTeams(current.teams, secureRandom) }) } } };
+      });
+    } else if (division === 2) {
       applyState((previous) => {
         const tournament = previous.tournaments[activeDay];
         const current = tournament.divisions[2];
@@ -954,6 +1025,15 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     });
     if (division === 2) updateDivisionTwoBlock(activeDay, selectedBlock, change);
     else updateMainBracket(activeDay, division, change);
+  };
+
+  const updateLeagueGameScore = (id: LeagueMatchId, index: number, side: 'a' | 'b', value: string) => {
+    applyState((previous) => {
+      const tournament = previous.tournaments.day2;
+      const league = tournament.league3;
+      const games = (league.scores[id].games ?? createEmptyGames()).map((game, gameIndex) => gameIndex === index ? { ...game, [side]: value } : game) as [GameScore, GameScore, GameScore];
+      return { ...previous, tournaments: { ...previous.tournaments, day2: { ...tournament, league3: { ...league, scores: { ...league.scores, [id]: scoreFromGames(games) } } } } };
+    });
   };
 
   const updateGameScore = (id: MatchId, index: number, side: 'a' | 'b', value: string) => {
@@ -1047,14 +1127,14 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     const registration = document.modelContext.registerTool({
       name: 'configure_division_block',
       title: '部門の参加チームを設定',
-      description: '1部・3部、または2部A/Bブロックの8チームを一括設定します。',
+      description: '男子の1・3部、女子の1部、2部A/Bは8チーム、女子3部は6チームを一括設定します。',
       inputSchema: {
         type: 'object',
         properties: {
           division: { type: 'integer', enum: [1, 2, 3] },
           tournament: { type: 'string', enum: ['day1', 'day2'] },
           block: { type: 'string', enum: ['A', 'B'] },
-          teams: { type: 'array', minItems: 8, maxItems: 8, items: { type: 'string', minLength: 1 } },
+          teams: { type: 'array', minItems: 6, maxItems: 8, items: { type: 'string', minLength: 1 } },
         },
         required: ['tournament', 'division', 'teams'],
         additionalProperties: false,
@@ -1062,24 +1142,30 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
       annotations: { readOnlyHint: false, untrustedContentHint: false },
       execute(input) {
         const value = input as { tournament?: unknown; division?: unknown; block?: unknown; teams?: unknown };
-        if ((value.tournament !== 'day1' && value.tournament !== 'day2') || ![1, 2, 3].includes(Number(value.division)) || !Array.isArray(value.teams) || value.teams.length !== 8 || value.teams.some((team) => typeof team !== 'string' || !team.trim())) {
-          throw new Error('大会、部門、8つのチーム名が必要です。');
+        const expected = value.tournament === 'day2' && Number(value.division) === 3 ? 6 : 8;
+        if ((value.tournament !== 'day1' && value.tournament !== 'day2') || ![1, 2, 3].includes(Number(value.division)) || !Array.isArray(value.teams) || value.teams.length !== expected || value.teams.some((team) => typeof team !== 'string' || !team.trim())) {
+          throw new Error(`大会、部門、${expected}つのチーム名が必要です。`);
         }
         const day = value.tournament;
         const id = Number(value.division) as DivisionId;
         const teams = value.teams.map((team) => String(team).trim());
-        if (new Set(teams).size !== 8) throw new Error('同じブロック内でチーム名は重複できません。');
+        if (new Set(teams).size !== expected) throw new Error('同じ部門・ブロック内でチーム名は重複できません。');
         if (id === 2) {
           if (value.block !== 'A' && value.block !== 'B') throw new Error('2部にはAまたはBブロックの指定が必要です。');
           updateDivisionTwoBlock(day, value.block, (bracket) => ({ ...bracket, teams }));
           setD2View(value.block);
+        } else if (day === 'day2' && id === 3) {
+          applyState((previous) => {
+            const tournament = previous.tournaments.day2;
+            return { ...previous, tournaments: { ...previous.tournaments, day2: { ...tournament, league3: reconcileLeagueScores(tournament.league3, { ...tournament.league3, teams }) } } };
+          });
         } else {
           updateMainBracket(day, id, (bracket) => ({ ...bracket, teams }));
         }
         setActiveDay(day);
         setDivision(id);
         setActiveTab('bracket');
-        return { configured: true, tournament: day, division: id, block: id === 2 ? value.block : null, teamCount: 8 };
+        return { configured: true, tournament: day, division: id, block: id === 2 ? value.block : null, teamCount: expected };
       },
     }, { signal: lifecycle.signal });
     Promise.resolve(registration).catch((error) => console.warn('WebMCP tool registration failed', error));
@@ -1113,8 +1199,8 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   const isGrandFinalView = division === 2 && d2View === 'grand';
   const divisionLabel = `${division}部`;
   const displayPrefix = division === 2 ? selectedBlock : undefined;
-  const blockReady = activeTeamCount === 8;
-  const blockFinished = blockCompleted === 12;
+  const blockReady = activeTeamCount === currentTeamTarget;
+  const blockFinished = currentCompleted === currentMatchTarget;
   const divisionFinished = division === 2 ? divisionTwoCompleted === 25 : blockFinished;
   const activeDayLabel = activeDay === 'day1' ? '1日目' : '2日目';
   const tournamentContext = `${activeDayLabel}・${activeTournament.category || 'カテゴリー未設定'}`;
@@ -1171,9 +1257,9 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
         <section className="overview" aria-label="大会進行状況">
           <div className="overview-copy">
-            <span className="kicker">{tournamentContext}・{divisionLabel}・全チーム3試合保証</span>
-            <h2>{division === 2 ? '2ブロックから、総合王者へ。' : '12試合で、1位から8位まで。'}</h2>
-            <p>{division === 2 ? 'A・B各ブロックを独立進行し、両優勝チームで総合決勝を行います。' : '勝敗を入力するだけで、次の対戦と最終順位を自動更新します。'}</p>
+            <span className="kicker">{tournamentContext}・{divisionLabel}・{isFemaleLeague ? '6チーム総当たり' : '全チーム3試合保証'}</span>
+            <h2>{isFemaleLeague ? '全15試合で、リーグ順位を決定。' : division === 2 ? '2ブロックから、総合王者へ。' : '12試合で、1位から8位まで。'}</h2>
+            <p>{isFemaleLeague ? '全チームが5試合を行い、勝数と得失差から順位を自動更新します。' : division === 2 ? 'A・B各ブロックを独立進行し、両優勝チームで総合決勝を行います。' : '勝敗を入力するだけで、次の対戦と最終順位を自動更新します。'}</p>
           </div>
           <div className="metrics">
             <div><span>登録チーム</span><strong>{currentTeamCount}<small>/ {currentTeamTarget}</small></strong></div>
@@ -1182,14 +1268,14 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           </div>
         </section>
 
-        <DivisionSelector division={division} tournament={activeTournament} onChange={(id) => { setDivision(id); if (id !== 2) setD2View('A'); }} />
+        <DivisionSelector division={division} tournament={activeTournament} day={activeDay} onChange={(id) => { setDivision(id); if (id !== 2) setD2View('A'); }} />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="workspace">
           <TabsList className={`step-nav ${isAdmin ? '' : 'step-nav--viewer'}`} aria-label={isAdmin ? '大会管理メニュー' : '大会結果メニュー'}>
             {!isAdmin ? <TabsTrigger value="practice"><MapPin size={16} /><span>練習コート</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="setup"><Settings2 size={16} /><span>大会設定</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="teams"><Users size={16} /><span>チーム登録</span><em>{currentTeamCount}/{currentTeamTarget}</em></TabsTrigger> : null}
-            <TabsTrigger value="bracket"><Shield size={16} /><span>トーナメント</span></TabsTrigger>
+            <TabsTrigger value="bracket"><Shield size={16} /><span>{isFemaleLeague ? 'リーグ戦' : 'トーナメント'}</span></TabsTrigger>
             <TabsTrigger value="schedule"><Timer size={16} /><span>進行表</span></TabsTrigger>
             {isAdmin ? <TabsTrigger value="practice"><MapPin size={16} /><span>練習コート</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="scores"><CircleDot size={16} /><span>結果入力</span><em>{currentCompleted}/{currentMatchTarget}</em></TabsTrigger> : null}
@@ -1218,22 +1304,22 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               </div>
             </div>
             <div className="rule-strip">
-              <div><strong>32</strong><span>参加チーム</span></div><ChevronRight />
+              <div><strong>{activeDay === 'day2' ? 30 : 32}</strong><span>参加チーム</span></div><ChevronRight />
               <div><strong>3</strong><span>部門</span></div><ChevronRight />
-              <div><strong>49</strong><span>合計試合数</span></div><ChevronRight />
-              <div><strong>8·16·8</strong><span>部門別チーム数</span></div>
+              <div><strong>{activeDay === 'day2' ? 52 : 49}</strong><span>合計試合数</span></div><ChevronRight />
+              <div><strong>{activeDay === 'day2' ? '8·16·6' : '8·16·8'}</strong><span>部門別チーム数</span></div>
             </div>
             <div className="panel-actions"><Button onClick={() => setActiveTab('teams')}>チーム登録へ <ArrowRight size={16} /></Button></div>
           </TabsContent> : null}
 
           {isAdmin ? <TabsContent value="teams" className="panel">
             <div className="panel-heading">
-              <div><span>STEP 02 · {divisionLabel}</span><h2>チーム登録・組み合わせ抽選</h2><p>{division === 2 ? 'A・Bへ8チームずつ登録後、16チーム全体からブロック分けと対戦をランダム抽選します。' : '8チームを登録後、1回戦の組み合わせをランダム抽選します。'}</p></div>
+              <div><span>STEP 02 · {divisionLabel}</span><h2>チーム登録・組み合わせ抽選</h2><p>{isFemaleLeague ? '6チームを登録すると、総当たりの全15試合が自動で作られます。抽選で対戦順を変更できます。' : division === 2 ? 'A・Bへ8チームずつ登録後、16チーム全体からブロック分けと対戦をランダム抽選します。' : '8チームを登録後、1回戦の組み合わせをランダム抽選します。'}</p></div>
               <Users size={30} />
             </div>
             {division === 2 ? <BlockSelector value={selectedBlock} includeGrandFinal={false} onChange={(value) => setD2View(value === 'B' ? 'B' : 'A')} /> : null}
             <div className="team-grid">
-              {activeBracket.teams.map((team, index) => (
+              {activeTeams.map((team, index) => (
                 <label className="team-field" key={index}>
                   <span className="seed-number">{division === 2 ? selectedBlock : ''}{String(index + 1).padStart(2, '0')}</span>
                   <span className="sr-only">{divisionLabel}{division === 2 ? `${selectedBlock}ブロック` : ''}登録枠{index + 1}</span>
@@ -1241,9 +1327,10 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
                 </label>
               ))}
             </div>
-            {activeTeamCount < 8
-              ? <p className="hint">{division === 2 ? `${selectedBlock}ブロック：` : ''}あと{8 - activeTeamCount}チームを登録してください。</p>
-              : <p className="success-note"><Check size={15} /> {division === 2 ? `${selectedBlock}ブロックの` : ''}8チーム登録が完了しました。</p>}
+            {activeTeamCount < currentTeamTarget
+              ? <p className="hint">{division === 2 ? `${selectedBlock}ブロック：` : ''}あと{currentTeamTarget - activeTeamCount}チームを登録してください。</p>
+              : <p className="success-note"><Check size={15} /> {division === 2 ? `${selectedBlock}ブロックの` : ''}{currentTeamTarget}チーム登録が完了しました。</p>}
+            {isFemaleLeague && activeTeamCount === 6 && !randomDrawReady ? <p className="score-error">同じ名前のチームがあります。6チームを別々の名前で登録してください。</p> : null}
             {division === 2 && d2TeamCount < 16 ? <p className="hint">2部のランダム抽選まで、A・B合わせてあと{16 - d2TeamCount}チームです。</p> : null}
             <div className="team-actions">
               {randomDrawHasResults ? (
@@ -1260,18 +1347,18 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-              ) : <Button variant="outline" disabled={!randomDrawReady} onClick={randomizeDraw}><Shuffle size={16} />{division === 2 ? '16チームをランダム抽選' : '8チームをランダム抽選'}</Button>}
+              ) : <Button variant="outline" disabled={!randomDrawReady} onClick={randomizeDraw}><Shuffle size={16} />{division === 2 ? '16チームをランダム抽選' : isFemaleLeague ? '対戦順をランダム抽選' : '8チームをランダム抽選'}</Button>}
               <Button disabled={!blockReady} onClick={() => setActiveTab('bracket')}>現在の組み合わせを見る <ArrowRight size={16} /></Button>
             </div>
           </TabsContent> : null}
 
           <TabsContent value="bracket" className="panel panel--wide">
             <div className="panel-heading">
-              <div><span>STEP 03 · {divisionLabel}</span><h2>{division === 2 ? 'ブロック別トーナメント' : 'トーナメント'}</h2><p>{division === 2 ? 'A・Bの試合は独立し、各ブロック優勝が総合決勝へ進みます。' : '勝者側と敗者側の両方が順位決定戦へ進みます。'}</p></div>
+              <div><span>STEP 03 · {divisionLabel}</span><h2>{isFemaleLeague ? '総当たりリーグ' : division === 2 ? 'ブロック別トーナメント' : 'トーナメント'}</h2><p>{isFemaleLeague ? '5節・全15試合。各チームはほかの5チームと1回ずつ対戦します。' : division === 2 ? 'A・Bの試合は独立し、各ブロック優勝が総合決勝へ進みます。' : '勝者側と敗者側の両方が順位決定戦へ進みます。'}</p></div>
               <Shield size={30} />
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
-            {isGrandFinalView
+            {isFemaleLeague ? <LeagueBoard league={activeTournament.league3} editable={false} onGame={updateLeagueGameScore} /> : isGrandFinalView
               ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
               : <BracketBoard bracket={activeBracket} editable={false} displayPrefix={displayPrefix} onScore={updateScore} onGame={updateGameScore} />}
             {isAdmin ? <div className="panel-actions">
@@ -1281,10 +1368,10 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           <TabsContent value="schedule" className="panel panel--wide">
             <div className="panel-heading">
-              <div><span>{tournamentContext} · {divisionLabel} · 全{division === 2 ? 25 : 12}試合</span><h2>{divisionLabel} 進行表</h2><p>{isAdmin ? '選択中の部門だけを表示しています。部門コートは大会設定から自動反映され、必要な試合だけ個別変更できます。' : '選択中の部門の開始時刻、コート、対戦状況を確認できます。'}</p></div>
+              <div><span>{tournamentContext} · {divisionLabel} · 全{currentMatchTarget}試合</span><h2>{divisionLabel} 進行表</h2><p>{isAdmin ? '選択中の部門だけを表示しています。部門コートは大会設定から自動反映され、必要な試合だけ個別変更できます。' : '選択中の部門の開始時刻、コート、対戦状況を確認できます。'}</p></div>
               <Timer size={30} />
             </div>
-            <ScheduleBoard tournament={activeTournament} division={division} editable={isAdmin} onChange={updateSchedule} />
+            <ScheduleBoard tournament={activeTournament} division={division} day={activeDay} editable={isAdmin} onChange={updateSchedule} />
           </TabsContent>
 
           <TabsContent value="practice" className="panel">
@@ -1325,26 +1412,26 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           {!isAdmin ? <TabsContent value="report" className="panel panel--wide">
             <div className="panel-heading">
-              <div><span>{tournamentContext} · {divisionLabel}</span><h2>試合結果を報告</h2><p>各団体戦の3対戦分のゲーム数を入力してください。管理者が確認すると、トーナメントと順位へ反映されます。</p></div>
+              <div><span>{tournamentContext} · {divisionLabel}</span><h2>試合結果を報告</h2><p>各団体戦の3対戦分のゲーム数を入力してください。管理者が確認すると、{isFemaleLeague ? 'リーグ順位' : 'トーナメントと順位'}へ反映されます。</p></div>
               <UploadCloud size={30} />
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
             <div className="report-grid">
-              {scheduleRows(activeTournament, division).filter((row) => {
+              {scheduleRows(activeTournament, division, activeDay).filter((row) => {
                 if (!row.teamA || !row.teamB) return false;
                 if (division !== 2) return true;
                 return d2View === 'grand' ? row.id === 'D2-GF' : row.id.startsWith(`D2-${d2View}-`);
               }).map((row) => <ResultReportCard key={`${activeDay}-${row.id}-${row.teamA}-${row.teamB}`} row={row} day={activeDay} />)}
             </div>
-            {scheduleRows(activeTournament, division).every((row) => !row.teamA || !row.teamB) ? <p className="grand-final-note">対戦チームが決まると、ここから報告できます。</p> : null}
+            {scheduleRows(activeTournament, division, activeDay).every((row) => !row.teamA || !row.teamB) ? <p className="grand-final-note">対戦チームが決まると、ここから報告できます。</p> : null}
           </TabsContent> : null}
           {isAdmin ? <TabsContent value="scores" className="panel panel--wide">
             <div className="panel-heading">
-              <div><span>STEP 04 · {divisionLabel}</span><h2>試合結果入力</h2><p>修正で出場チームが変わる後続試合は、自動的に未入力へ戻ります。</p></div>
+              <div><span>STEP 04 · {divisionLabel}</span><h2>試合結果入力</h2><p>{isFemaleLeague ? '試合結果を修正すると、順位表を自動で再計算します。' : '修正で出場チームが変わる後続試合は、自動的に未入力へ戻ります。'}</p></div>
               <CircleDot size={30} />
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
-            {isGrandFinalView
+            {isFemaleLeague ? <LeagueBoard league={activeTournament.league3} editable onGame={updateLeagueGameScore} /> : isGrandFinalView
               ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
               : <BracketBoard bracket={activeBracket} editable displayPrefix={displayPrefix} onScore={updateScore} onGame={updateGameScore} />}
             <div className="panel-actions">
@@ -1375,11 +1462,11 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           </TabsContent> : null}
           <TabsContent value="ranking" className="panel">
             <div className="panel-heading">
-              <div><span>STEP 05 · {divisionLabel}</span><h2>{division === 2 && d2View === 'grand' ? '2部 総合結果' : '最終順位'}</h2><p>{division === 2 ? 'A・B各ブロックの順位を保持し、総合決勝は優勝・準優勝のみ決定します。' : blockFinished ? '全12試合が終了し、最終順位が確定しました。' : `順位確定まであと${12 - blockCompleted}試合です。`}</p></div>
+              <div><span>STEP 05 · {divisionLabel}</span><h2>{isFemaleLeague ? 'リーグ順位表' : division === 2 && d2View === 'grand' ? '2部 総合結果' : '最終順位'}</h2><p>{isFemaleLeague ? blockFinished ? '全15試合が終了しました。' : `順位は暫定です。残り${15 - leagueCompleted}試合です。` : division === 2 ? 'A・B各ブロックの順位を保持し、総合決勝は優勝・準優勝のみ決定します。' : blockFinished ? '全12試合が終了し、最終順位が確定しました。' : `順位確定まであと${12 - blockCompleted}試合です。`}</p></div>
               <Trophy size={30} />
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
-            {isGrandFinalView ? (
+            {isFemaleLeague ? <LeagueStandings league={activeTournament.league3} /> : isGrandFinalView ? (
               <div className="overall-result">
                 <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
                 <div className="overall-podium">

@@ -1,4 +1,5 @@
 import { MATCH_IDS, createEmptyBracket, normalizeScore, type BracketState, type MatchId, type Score } from './tournament.ts';
+import { LEAGUE_MATCH_IDS, createEmptyLeague, type LeagueMatchId, type LeagueState } from './league.ts';
 
 export type DivisionId = 1 | 2 | 3;
 export type BlockId = 'A' | 'B';
@@ -8,7 +9,8 @@ export type ScheduleMatchId =
   | `D2-A-${MatchId}`
   | `D2-B-${MatchId}`
   | 'D2-GF'
-  | `D3-${MatchId}`;
+  | `D3-${MatchId}`
+  | `D3-${LeagueMatchId}`;
 export type ScheduleEntry = { startTime: string; court: string };
 export type TournamentSchedule = Record<ScheduleMatchId, ScheduleEntry>;
 export type CourtSettings = {
@@ -57,6 +59,7 @@ export const SCHEDULE_MATCH_IDS: ScheduleMatchId[] = [
   ...MATCH_IDS.map((id) => `D2-B-${id}` as const),
   'D2-GF',
   ...MATCH_IDS.map((id) => `D3-${id}` as const),
+  ...LEAGUE_MATCH_IDS.map((id) => `D3-${id}` as const),
 ];
 
 export type DivisionTwoState = {
@@ -74,6 +77,7 @@ export type TournamentState = {
     2: DivisionTwoState;
     3: BracketState;
   };
+  league3: LeagueState;
   courts: CourtSettings;
   practiceCourts: Record<string, string>;
   practiceTimes: PracticeTimes;
@@ -165,6 +169,7 @@ export function createTournament(category: string, name: string): TournamentStat
       2: { A: createEmptyBracket(), B: createEmptyBracket(), grandFinal: { a: '', b: '' } },
       3: createEmptyBracket(),
     },
+    league3: createEmptyLeague(),
     courts: normalizeCourts(),
     practiceCourts: {},
     practiceTimes: createEmptyPracticeTimes(),
@@ -188,6 +193,8 @@ export function normalizeTournament(
   fallback: TournamentState,
 ): TournamentState {
   const divisionTwo = value?.divisions?.[2];
+  const league = value?.league3;
+  const leagueTeams = league?.teams ?? value?.divisions?.[3]?.teams ?? [];
   return {
     name: typeof value?.name === 'string' ? value.name : fallback.name,
     category: typeof value?.category === 'string' ? value.category : fallback.category,
@@ -200,6 +207,10 @@ export function normalizeTournament(
         grandFinal: normalizeScore(divisionTwo?.grandFinal),
       },
       3: normalizeBracket(value?.divisions?.[3]),
+    },
+    league3: {
+      teams: Array.from({ length: 6 }, (_, index) => typeof leagueTeams[index] === 'string' ? leagueTeams[index] : ''),
+      scores: Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [id, normalizeScore(league?.scores?.[id])])) as LeagueState['scores'],
     },
     courts: normalizeCourts(value?.courts),
     practiceCourts: normalizePracticeCourts(value?.practiceCourts),

@@ -110,10 +110,11 @@ void test('1日目と2日目の大会データは完全に独立している', (
   assert.equal(state.tournaments.day2.category, '女子');
 });
 
-void test('各大会に49試合分の進行表があり、旧データには空欄を自動補完する', () => {
+void test('大会データに男女それぞれの進行表枠があり、旧データには空欄を自動補完する', () => {
   const current = createInitialAppState();
-  assert.equal(Object.keys(current.tournaments.day1.schedule).length, 49);
+  assert.equal(Object.keys(current.tournaments.day1.schedule).length, 64);
   assert.ok(current.tournaments.day1.schedule['D2-GF']);
+  assert.ok(current.tournaments.day2.schedule['D3-L15']);
 
   const legacyLike = structuredClone(current) as unknown as Record<string, unknown>;
   const tournaments = legacyLike.tournaments as Record<string, Record<string, unknown>>;
