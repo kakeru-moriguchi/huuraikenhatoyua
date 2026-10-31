@@ -93,8 +93,8 @@ button, input { font: inherit; }
 .division-nav button > em { padding: 4px 7px; color: #53645f; background: #e8ede8; border-radius: 99px; font-size: .65rem; font-style: normal; }
 .division-nav button[aria-pressed='true'] > em { color: var(--brand-deep); background: var(--brand-highlight); }
 .workspace { display: block; }
-.step-nav { width: 100%; height: auto; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding: 5px; background: var(--brand-nav); border-radius: 15px; }
-.step-nav--viewer { grid-template-columns: repeat(4, 1fr); }
+.step-nav { width: 100%; height: auto; display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 5px; background: var(--brand-nav); border-radius: 15px; }
+.step-nav--viewer { grid-template-columns: repeat(5, 1fr); }
 .step-nav button { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 12px; color: #5e6f6a; border-radius: 11px; font-size: .82rem; font-weight: 700; }
 .step-nav button[data-state='active'] { color: #fff; background: var(--brand-main); box-shadow: 0 5px 14px var(--brand-shadow); }
 .step-nav em { padding: 2px 6px; color: #40544f; background: rgba(255,255,255,.6); border-radius: 99px; font-size: .65rem; font-style: normal; }
@@ -183,9 +183,36 @@ button, input { font: inherit; }
 .score-input::-webkit-inner-spin-button { display: none; }
 .score-display { min-width: 28px; font-family: var(--font-display); font-size: 1.05rem; font-weight: 700; text-align: center; }
 .score-error { margin: 0; padding: 7px 12px; color: #a22e2e; background: #fff0f0; font-size: .67rem; }
+.game-details { padding: 10px 12px; background: #fff; border-bottom: 1px solid #edf0ed; }
+.game-details__header, .game-details__row { display: grid; grid-template-columns: minmax(58px,1fr) 52px 52px; align-items: center; gap: 8px; }
+.game-details__header { margin-bottom: 5px; color: #7d8985; font-size: .62rem; font-weight: 700; }
+.game-details__header span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.game-details__header span:first-child { text-align: left; }
+.game-details__row { min-height: 42px; border-top: 1px solid #f1f3f0; }
+.game-details__row strong { font-size: .72rem; }
+.game-input { width: 52px; height: 34px; padding: 3px; text-align: center; }
+.game-input::-webkit-inner-spin-button { display: none; }
+.game-display { text-align: center; font-size: .83rem; font-weight: 750; }
+.game-details__hint { margin: 7px 0 0; color: #788681; font-size: .65rem; line-height: 1.45; }
 .route-label { display: flex; align-items: center; gap: 4px; margin: 0; padding: 8px 12px; color: #697975; background: #fbfcfa; font-size: .64rem; }
 .score-rounds { display: grid; gap: 28px; }
 .score-grid { grid-template-columns: repeat(4, minmax(230px,1fr)); }
+.report-grid, .pending-grid { display: grid; grid-template-columns: repeat(3,minmax(280px,1fr)); gap: 14px; }
+.report-card, .pending-card { overflow: hidden; background: #fff; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 4px 13px var(--brand-shadow-soft); }
+.report-card__teams { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: 8px; padding: 12px; }
+.report-card__teams strong { overflow: hidden; text-overflow: ellipsis; font-size: .82rem; }
+.report-card__teams strong:last-child { text-align: right; }
+.report-card__teams span { color: #8c9895; font-size: .66rem; font-weight: 800; }
+.report-card__note { margin: 0; padding: 0 12px 10px; color: #7f7771; font-size: .68rem; }
+.report-card__footer { display: grid; gap: 10px; padding: 12px; }
+.report-card__footer > span, .pending-card__sets { color: var(--brand-text); font-size: .76rem; font-weight: 750; }
+.report-card__footer label { display: grid; gap: 5px; font-size: .72rem; font-weight: 700; }
+.report-card__footer select { width: 100%; min-height: 40px; padding: 7px 10px; color: var(--brand-text); background: var(--brand-field); border: 1px solid var(--border); border-radius: 8px; }
+.report-card__footer button { width: 100%; }
+.report-card__success { margin: 0; padding: 8px 10px; color: #24673e; background: #e8f8ed; border-radius: 8px; font-size: .72rem; }
+.pending-card__meta { margin: 0; padding: 10px 12px; color: #62736e; font-size: .7rem; }
+.pending-card__sets { margin: 0; padding: 10px 12px; }
+.pending-card__actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px 12px; }
 .schedule-board { display: grid; gap: 28px; }
 .schedule-section { min-width: 0; }
 .schedule-section__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
@@ -257,7 +284,7 @@ button, input { font: inherit; }
 
 @media (max-width: 900px) {
   .overview { grid-template-columns: 1fr; } .metrics { width: 100%; } .metrics div { flex: 1; min-width: 0; }
-  .score-grid { grid-template-columns: repeat(2, minmax(230px,1fr)); } .save-state { display: none; }
+  .score-grid, .report-grid, .pending-grid { grid-template-columns: repeat(2, minmax(280px,1fr)); } .save-state { display: none; }
   .tournament-nav button { grid-template-columns: auto 1fr auto; } .tournament-nav__date { grid-column: 2 / -1; } .tournament-nav button > svg { grid-column: 3; grid-row: 1; }
   .division-nav button { grid-template-columns: auto 1fr; } .division-nav button > em { display: none; }
   .court-guide { grid-template-columns: 1fr; } .court-guide__title { min-width: 0; }
@@ -294,7 +321,7 @@ button, input { font: inherit; }
   .form-grid, .team-grid, .court-settings__grid, .practice-court-groups { grid-template-columns: 1fr; } .court-settings__heading { flex-direction: column; gap: 7px; } .rule-strip { grid-template-columns: repeat(4,1fr); gap: 5px; padding: 15px 8px; }
   .rule-strip > svg { display: none; } .rule-strip strong { font-size: 1.2rem; } .rule-strip span { font-size: .58rem; line-height: 1.3; }
   .bracket-grid { scroll-snap-type: x mandatory; } .round-column { width: 84vw; scroll-snap-align: start; }
-  .score-grid { grid-template-columns: 1fr; } .panel-actions button, .team-actions button { width: 100%; }
+  .score-grid, .report-grid, .pending-grid { grid-template-columns: 1fr; } .panel-actions button, .team-actions button { width: 100%; }
   .team-actions { flex-direction: column; }
   .schedule-board { gap: 22px; } .schedule-table { grid-template-columns: 1fr; }
   .rank-row { grid-template-columns: 44px 1fr auto; min-height: 61px; padding-right: 12px; } .rank-number { width: 40px; height: 40px; }

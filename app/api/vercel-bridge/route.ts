@@ -9,6 +9,8 @@ import {
   verifyAdminPassword,
 } from '@/db/admin-auth';
 import { getTournamentSnapshot, saveTournamentState } from '@/db/tournament';
+import { listPendingResults, reviewResultReport, submitResultReport } from '@/db/result-submissions';
+import { ResultReportError } from '@/lib/result-submission';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +51,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!isAuthorized(request)) return Response.json({ error: 'Unauthorized.' }, { status: 401 });
   try {
-    const body = await request.json() as { action?: unknown; password?: unknown; token?: unknown; email?: unknown; state?: unknown };
+    const body = await request.json() as { action?: unknown; password?: unknown; token?: unknown; email?: unknown; state?: unknown; report?: unknown; id?: unknown };
+    if (body.action === 'submit-result') {
+      await submitResultReport(body.report);
+      return Response.json({ ok: true });
+    }
     const expectedEmail = adminEmail();
     const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
 
@@ -60,10 +66,14 @@ export async function POST(request: Request) {
       await deleteAdminSession(typeof body.token === 'string' ? body.token : undefined);
       return Response.json({ ok: true });
     }
-    if (body.action === 'save') {
+    if (body.action === 'save' || body.action === 'list-results' || body.action === 'approve-result' || body.action === 'reject-result') {
       const token = typeof body.token === 'string' ? body.token : undefined;
       if (email !== expectedEmail || !(await hasValidAdminSession(token, expectedEmail))) return Response.json({ error: '管理者パスワードを入力してください。' }, { status: 401 });
-      return Response.json({ snapshot: await saveTournamentState(body.state, expectedEmail) });
+      if (body.action === 'save') return Response.json({ snapshot: await saveTournamentState(body.state, expectedEmail) });
+      if (body.action === 'list-results') return Response.json({ submissions: await listPendingResults() });
+      const id = typeof body.id === 'number' ? body.id : NaN;
+      const decision = body.action === 'approve-result' ? 'approve' : 'reject';
+      return Response.json({ snapshot: await reviewResultReport(id, decision, expectedEmail) });
     }
 
     if (email !== expectedEmail) return Response.json({ error: '管理者権限がありません。' }, { status: 403 });
@@ -82,7 +92,7 @@ export async function POST(request: Request) {
     return Response.json({ token: session.token, maxAge: session.maxAge });
   } catch (error) {
     console.error('Vercel bridge POST failed', error);
-    return Response.json({ error: '管理者処理に失敗しました。' }, { status: 500 });
+    if (error instanceof ResultReportError) return Response.json({ error: error.message }, { status: error.status });
+    return Response.json({ error: '処理に失敗しました。' }, { status: 500 });
   }
 }
-

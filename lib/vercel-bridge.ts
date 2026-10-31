@@ -1,4 +1,5 @@
 import { normalizeAppState, type AppState } from '@/lib/event';
+import type { PendingResult } from '@/lib/result-submission';
 
 type TournamentSnapshot = {
   state: AppState;
@@ -14,6 +15,7 @@ type BridgeResponse = {
   token?: string;
   maxAge?: number;
   snapshot?: TournamentSnapshot;
+  submissions?: PendingResult[];
 };
 
 export class VercelBridgeError extends Error {
@@ -82,3 +84,16 @@ export async function saveVercelTournament(state: unknown, token: string | undef
   return { ...result.snapshot, state: normalizeAppState(result.snapshot.state) };
 }
 
+export async function submitVercelResult(report: unknown): Promise<void> {
+  await bridgeRequest('POST', '', { action: 'submit-result', report });
+}
+
+export async function listVercelPendingResults(token: string | undefined, email: string): Promise<PendingResult[]> {
+  const result = await bridgeRequest('POST', '', { action: 'list-results', token, email });
+  return result.submissions ?? [];
+}
+
+export async function reviewVercelResult(id: number, decision: 'approve' | 'reject', token: string | undefined, email: string): Promise<TournamentSnapshot | null> {
+  const result = await bridgeRequest('POST', '', { action: decision === 'approve' ? 'approve-result' : 'reject-result', id, token, email });
+  return result.snapshot ? { ...result.snapshot, state: normalizeAppState(result.snapshot.state) } : null;
+}

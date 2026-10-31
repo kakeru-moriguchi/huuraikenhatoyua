@@ -56,3 +56,22 @@ export async function saveTournamentState(value: unknown, updatedBy: string): Pr
 
   return getTournamentSnapshot();
 }
+
+export async function saveTournamentStateAtRevision(value: AppState, expectedRevision: number, updatedBy: string): Promise<TournamentSnapshot> {
+  const state = normalizeAppState(value);
+  const result = await database()
+    .prepare(`
+      INSERT INTO tournament_state (id, data, revision, updated_at, updated_by)
+      VALUES (?, ?, 1, CURRENT_TIMESTAMP, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        data = excluded.data,
+        revision = tournament_state.revision + 1,
+        updated_at = CURRENT_TIMESTAMP,
+        updated_by = excluded.updated_by
+      WHERE tournament_state.revision = ?
+    `)
+    .bind(STATE_ID, JSON.stringify(state), updatedBy, expectedRevision)
+    .run();
+  if (!result.meta.changes) throw new Error('大会データが更新されました。再読み込みして確認してください。');
+  return getTournamentSnapshot();
+}

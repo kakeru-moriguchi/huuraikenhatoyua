@@ -24,3 +24,14 @@ export const adminSessions = sqliteTable('admin_sessions', {
   expiresAt: integer('expires_at').notNull(),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const resultSubmissions = sqliteTable('result_submissions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  day: text('day').notNull(),
+  matchId: text('match_id').notNull(),
+  teamA: text('team_a').notNull(),
+  teamB: text('team_b').notNull(),
+  submittedBy: text('submitted_by').notNull(),
+  games: text('games').notNull(),
+  submittedAt: text('submitted_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});

@@ -1,4 +1,4 @@
-import { MATCH_IDS, createEmptyBracket, emptyScores, type BracketState, type MatchId, type Score } from './tournament.ts';
+import { MATCH_IDS, createEmptyBracket, normalizeScore, type BracketState, type MatchId, type Score } from './tournament.ts';
 
 export type DivisionId = 1 | 2 | 3;
 export type BlockId = 'A' | 'B';
@@ -152,7 +152,7 @@ export type PreviousAppState = {
 
 export function normalizeBracket(value?: Partial<BracketState>): BracketState {
   const teams = Array.from({ length: 8 }, (_, index) => value?.teams?.[index] ?? '');
-  return { teams, scores: { ...emptyScores(), ...value?.scores } };
+  return { teams, scores: Object.fromEntries(MATCH_IDS.map((id) => [id, normalizeScore(value?.scores?.[id])])) as Record<MatchId, Score> };
 }
 
 export function createTournament(category: string, name: string): TournamentState {
@@ -197,10 +197,7 @@ export function normalizeTournament(
       2: {
         A: normalizeBracket(divisionTwo?.A),
         B: normalizeBracket(divisionTwo?.B),
-        grandFinal: {
-          a: divisionTwo?.grandFinal?.a ?? '',
-          b: divisionTwo?.grandFinal?.b ?? '',
-        },
+        grandFinal: normalizeScore(divisionTwo?.grandFinal),
       },
       3: normalizeBracket(value?.divisions?.[3]),
     },
@@ -235,10 +232,7 @@ export function migratePreviousState(value: PreviousAppState, version: 1 | 2): A
       2: {
         A: normalizeBracket(value.divisions[2]?.A),
         B: normalizeBracket(value.divisions[2]?.B),
-        grandFinal: {
-          a: value.divisions[2]?.grandFinal?.a ?? '',
-          b: value.divisions[2]?.grandFinal?.b ?? '',
-        },
+        grandFinal: normalizeScore(value.divisions[2]?.grandFinal),
       },
       3: normalizeBracket(value.divisions[3]),
     };

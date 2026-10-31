@@ -41,6 +41,11 @@ import {
 import {
   MATCHES,
   MATCH_IDS,
+  createEmptyGames,
+  gameWinner,
+  scoreFromGames,
+  scoreHasInput,
+  tallyGames,
   getRanking,
   reconcileGrandFinal,
   reconcileScores,
@@ -52,6 +57,7 @@ import {
   type MatchDefinition,
   type MatchId,
   type MatchSource,
+  type GameScore,
   type Score,
 } from '@/lib/tournament';
 import {
@@ -71,6 +77,7 @@ import {
   type TournamentDayId,
   type TournamentState,
 } from '@/lib/event';
+import type { PendingResult } from '@/lib/result-submission';
 
 declare global {
   interface Document {
@@ -220,6 +227,35 @@ function sourceLabel(source: MatchSource) {
     : `${source.matchId} ${source.type === 'winner' ? '勝者' : '敗者'}`;
 }
 
+function GameDetails({
+  games,
+  teamA,
+  teamB,
+  editable,
+  ready,
+  onChange,
+}: {
+  games?: [GameScore, GameScore, GameScore];
+  teamA: string;
+  teamB: string;
+  editable: boolean;
+  ready: boolean;
+  onChange: (index: number, side: 'a' | 'b', value: string) => void;
+}) {
+  if (!editable && !games) return null;
+  const entries = games ?? createEmptyGames();
+  return <div className="game-details">
+    <div className="game-details__header"><span>対戦</span><span>{teamA || 'チームA'}</span><span>{teamB || 'チームB'}</span></div>
+    {entries.map((game, index) => <div className="game-details__row" key={index}>
+      <strong>第{index + 1}対戦</strong>
+      {(['a', 'b'] as const).map((side) => editable
+        ? <Input key={side} aria-label={`第${index + 1}対戦 ${side === 'a' ? teamA : teamB}のゲーム数`} className="game-input" disabled={!ready} inputMode="numeric" min="0" max="99" type="number" value={game[side]} onChange={(event) => onChange(index, side, event.target.value.replace(/[^0-9]/g, '').slice(0, 2))} />
+        : <span key={side} className="game-display">{game[side] || '—'}</span>)}
+    </div>)}
+    {editable ? <p className="game-details__hint">3対戦すべてのゲーム数を入力すると、団体戦の勝利数を自動計算します。</p> : null}
+  </div>;
+}
+
 function MatchCard({
   match,
   state,
@@ -227,6 +263,7 @@ function MatchCard({
   editable,
   displayPrefix,
   onScore,
+  onGame,
 }: {
   match: MatchDefinition;
   state: BracketState;
@@ -234,13 +271,14 @@ function MatchCard({
   editable: boolean;
   displayPrefix?: string;
   onScore: (id: MatchId, side: 'a' | 'b', value: string) => void;
+  onGame: (id: MatchId, index: number, side: 'a' | 'b', value: string) => void;
 }) {
   const detail = resolved[match.id];
   const score = state.scores[match.id];
   const outcome = scoreWinner(score);
   const ready = Boolean(detail.teamA && detail.teamB);
   const complete = Boolean(ready && outcome);
-  const tied = ready && score.a !== '' && score.b !== '' && score.a === score.b;
+  const tied = ready && (score.games ? score.games.some((game) => game.a !== '' && game.b !== '' && !gameWinner(game)) : score.a !== '' && score.b !== '' && score.a === score.b);
   const displayId = displayPrefix ? `${displayPrefix}-${match.id}` : match.id;
 
   return (
@@ -264,7 +302,7 @@ function MatchCard({
               <Input
                 aria-label={`${displayId} ${team || (side === 'a' ? 'チームA' : 'チームB')}の得点`}
                 className="score-input"
-                disabled={!ready}
+                disabled={!ready || Boolean(score.games)}
                 inputMode="numeric"
                 min="0"
                 type="number"
@@ -275,6 +313,7 @@ function MatchCard({
           </div>
         );
       })}
+      <GameDetails games={score.games} teamA={detail.teamA} teamB={detail.teamB} editable={editable} ready={ready} onChange={(index, side, value) => onGame(match.id, index, side, value)} />
       {tied ? <p className="score-error">同点では確定できません。勝敗がつく得点を入力してください。</p> : null}
       <p className="route-label"><ArrowRight size={13} /> {match.route}</p>
     </article>
@@ -286,11 +325,13 @@ function BracketBoard({
   editable,
   displayPrefix,
   onScore,
+  onGame,
 }: {
   bracket: BracketState;
   editable: boolean;
   displayPrefix?: string;
   onScore: (id: MatchId, side: 'a' | 'b', value: string) => void;
+  onGame: (id: MatchId, index: number, side: 'a' | 'b', value: string) => void;
 }) {
   const resolved = useMemo(() => resolveTournament(bracket), [bracket]);
   if (editable) {
@@ -304,7 +345,7 @@ function BracketBoard({
             </div>
             <div className="score-grid">
               {MATCHES.filter((match) => match.round === round).map((match) => (
-                <MatchCard key={match.id} match={match} state={bracket} resolved={resolved} editable displayPrefix={displayPrefix} onScore={onScore} />
+                <MatchCard key={match.id} match={match} state={bracket} resolved={resolved} editable displayPrefix={displayPrefix} onScore={onScore} onGame={onGame} />
               ))}
             </div>
           </section>
@@ -323,7 +364,7 @@ function BracketBoard({
           </div>
           <div className="round-matches">
             {MATCHES.filter((match) => match.round === round).map((match) => (
-              <MatchCard key={match.id} match={match} state={bracket} resolved={resolved} editable={false} displayPrefix={displayPrefix} onScore={onScore} />
+              <MatchCard key={match.id} match={match} state={bracket} resolved={resolved} editable={false} displayPrefix={displayPrefix} onScore={onScore} onGame={onGame} />
             ))}
           </div>
         </section>
@@ -463,17 +504,19 @@ function GrandFinalCard({
   score,
   editable,
   onScore,
+  onGame,
 }: {
   teams: [string, string];
   score: Score;
   editable: boolean;
   onScore: (side: 'a' | 'b', value: string) => void;
+  onGame: (index: number, side: 'a' | 'b', value: string) => void;
 }) {
   const resolved = resolveGrandFinal(teams, score);
   const outcome = scoreWinner(score);
   const ready = Boolean(teams[0] && teams[1]);
   const complete = Boolean(resolved.winner);
-  const tied = ready && score.a !== '' && score.b !== '' && score.a === score.b;
+  const tied = ready && (score.games ? score.games.some((game) => game.a !== '' && game.b !== '' && !gameWinner(game)) : score.a !== '' && score.b !== '' && score.a === score.b);
   return (
     <div className="grand-final-wrap">
       <div className="grand-final-label"><Crown size={20} /><span>DIVISION 2</span><strong>総合決勝</strong></div>
@@ -495,7 +538,7 @@ function GrandFinalCard({
               <Input
                 aria-label={`2部総合決勝 ${teams[index] || (index === 0 ? 'Aブロック代表' : 'Bブロック代表')}の得点`}
                 className="score-input"
-                disabled={!ready}
+                disabled={!ready || Boolean(score.games)}
                 inputMode="numeric"
                 min="0"
                 type="number"
@@ -505,6 +548,7 @@ function GrandFinalCard({
             ) : <span className="score-display">{score[side] === '' ? '—' : score[side]}</span>}
           </div>
         ))}
+        <GameDetails games={score.games} teamA={teams[0]} teamB={teams[1]} editable={editable} ready={ready} onChange={onGame} />
         {tied ? <p className="score-error">同点では確定できません。勝敗がつく得点を入力してください。</p> : null}
         <p className="route-label"><ArrowRight size={13} /> 勝者 → 2部総合優勝 / 敗者 → 2部総合準優勝</p>
       </article>
@@ -513,6 +557,63 @@ function GrandFinalCard({
   );
 }
 
+function ResultReportCard({ row, day }: { row: ScheduleRow; day: TournamentDayId }) {
+  const [games, setGames] = useState<[GameScore, GameScore, GameScore]>(createEmptyGames);
+  const [submittedBy, setSubmittedBy] = useState('');
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const tally = tallyGames(games);
+
+  const updateGame = (index: number, side: 'a' | 'b', value: string) => {
+    setGames((previous) => previous.map((game, gameIndex) => gameIndex === index ? { ...game, [side]: value } : game) as [GameScore, GameScore, GameScore]);
+    setMessage('');
+    setError('');
+  };
+
+  const submit = async () => {
+    if (!submittedBy || !tally.complete) {
+      setError('報告チームを選び、3対戦すべてのゲーム数を入力してください。');
+      return;
+    }
+    setSending(true);
+    setError('');
+    try {
+      const response = await fetch('/api/result-submissions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'submit', report: { day, matchId: row.id, teamA: row.teamA, teamB: row.teamB, submittedBy, games } }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || '送信できませんでした。');
+      setMessage('送信しました。管理者の確認後に結果へ反映されます。');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '送信できませんでした。');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return <article className="report-card">
+    <div className="match-card__head"><div><span className="match-id">{row.id}</span><h3>{row.title}</h3></div><span className={`status ${row.winner ? 'status--done' : 'status--ready'}`}>{row.winner ? '確定済み' : '結果待ち'}</span></div>
+    <div className="report-card__teams"><strong>{row.teamA}</strong><span>VS</span><strong>{row.teamB}</strong></div>
+    {row.winner ? <p className="report-card__note">確定済みの結果も修正報告できます。承認されるまで順位は変わりません。</p> : null}
+    <GameDetails games={games} teamA={row.teamA} teamB={row.teamB} editable ready onChange={updateGame} />
+    <div className="report-card__footer">
+      <span>団体戦の勝利数：{tally.a || '0'} - {tally.b || '0'}{tally.complete ? '' : '（入力中）'}</span>
+      <label>報告するチーム
+        <select value={submittedBy} onChange={(event) => { setSubmittedBy(event.target.value); setMessage(''); }}>
+          <option value="">選択してください</option>
+          <option value={row.teamA}>{row.teamA}</option>
+          <option value={row.teamB}>{row.teamB}</option>
+        </select>
+      </label>
+      <Button type="button" disabled={sending || !tally.complete || !submittedBy} onClick={submit}>{sending ? '送信中…' : '結果を報告'}</Button>
+      {message ? <p className="report-card__success" role="status">{message}</p> : null}
+      {error ? <p className="score-error" role="alert">{error}</p> : null}
+    </div>
+  </article>;
+}
 export type TournamentAppProps = {
   initialState: AppState;
   mode: 'admin' | 'participant';
@@ -529,6 +630,9 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [syncError, setSyncError] = useState<string | null>(initialLoadError);
   const [localImport, setLocalImport] = useState<AppState | null>(null);
+  const [pendingResults, setPendingResults] = useState<PendingResult[]>([]);
+  const [reviewBusyId, setReviewBusyId] = useState<number | null>(null);
+  const [reviewError, setReviewError] = useState('');
   const editVersion = useRef(0);
   const isAdmin = mode === 'admin';
 
@@ -619,6 +723,23 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     };
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const response = await fetch('/api/result-submissions', { cache: 'no-store' });
+        if (!response.ok) throw new Error('報告を取得できませんでした。');
+        const result = await response.json() as { submissions: PendingResult[] };
+        if (active) { setPendingResults(result.submissions); setReviewError(''); }
+      } catch {
+        if (active) setReviewError('報告を取得できませんでした。再読み込みしてください。');
+      }
+    };
+    void load();
+    const timer = window.setInterval(load, 10_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [isAdmin]);
   const updateTournamentMeta = (change: Partial<Pick<TournamentState, 'name' | 'category' | 'date'>>) => {
     applyState((previous) => ({
       ...previous,
@@ -717,7 +838,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             ...tournament,
             teamPracticeTimes: {
               ...tournament.teamPracticeTimes,
-              [team]: { start: '', end: '', ...tournament.teamPracticeTimes[team], [field]: value },
+              [team]: { ...{ start: '', end: '' }, ...tournament.teamPracticeTimes[team], [field]: value },
             },
           },
         },
@@ -765,7 +886,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     { id: 'division2A', label: '2部 Aブロック', teams: activeTournament.divisions[2].A.teams },
     { id: 'division2B', label: '2部 Bブロック', teams: activeTournament.divisions[2].B.teams },
     { id: 'division3', label: '3部', teams: activeTournament.divisions[3].teams },
-  ].map((group) => ({ ...group, teams: group.teams.map((team) => team.trim()).filter(Boolean) }));
+  ].map((group) => ({ ...group, id: group.id as PracticeGroupId, teams: group.teams.map((team) => team.trim()).filter(Boolean) }));
   const selectedBlock: BlockId = d2View === 'B' ? 'B' : 'A';
   const activeBracket = division === 2 ? activeTournament.divisions[2][selectedBlock] : activeTournament.divisions[division];
   const activeResolved = useMemo(() => resolveTournament(activeBracket), [activeBracket]);
@@ -785,8 +906,8 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   const randomDrawReady = division === 2 ? d2TeamCount === 16 : activeTeamCount === 8;
   const randomDrawHasResults = division === 2
     ? [...MATCH_IDS.map((id) => activeTournament.divisions[2].A.scores[id]), ...MATCH_IDS.map((id) => activeTournament.divisions[2].B.scores[id]), activeTournament.divisions[2].grandFinal]
-      .some((score) => score.a !== '' || score.b !== '')
-    : MATCH_IDS.some((id) => activeBracket.scores[id].a !== '' || activeBracket.scores[id].b !== '');
+      .some(scoreHasInput)
+    : MATCH_IDS.some((id) => scoreHasInput(activeBracket.scores[id]));
 
   const updateTeam = (index: number, value: string) => {
     const change = (bracket: BracketState) => {
@@ -835,6 +956,16 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     else updateMainBracket(activeDay, division, change);
   };
 
+  const updateGameScore = (id: MatchId, index: number, side: 'a' | 'b', value: string) => {
+    const change = (bracket: BracketState) => {
+      const games = (bracket.scores[id].games ?? createEmptyGames()).map((game, gameIndex) =>
+        gameIndex === index ? { ...game, [side]: value } : game,
+      ) as [GameScore, GameScore, GameScore];
+      return { ...bracket, scores: { ...bracket.scores, [id]: scoreFromGames(games) } };
+    };
+    if (division === 2) updateDivisionTwoBlock(activeDay, selectedBlock, change);
+    else updateMainBracket(activeDay, division, change);
+  };
   const updateGrandFinalScore = (side: 'a' | 'b', value: string) => {
     if (!grandFinalTeams[0] || !grandFinalTeams[1]) return;
     applyState((previous) => {
@@ -858,6 +989,29 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     });
   };
 
+  const updateGrandFinalGameScore = (index: number, side: 'a' | 'b', value: string) => {
+    if (!grandFinalTeams[0] || !grandFinalTeams[1]) return;
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      const current = tournament.divisions[2].grandFinal;
+      const games = (current.games ?? createEmptyGames()).map((game, gameIndex) =>
+        gameIndex === index ? { ...game, [side]: value } : game,
+      ) as [GameScore, GameScore, GameScore];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            divisions: {
+              ...tournament.divisions,
+              2: { ...tournament.divisions[2], grandFinal: scoreFromGames(games) },
+            },
+          },
+        },
+      };
+    });
+  };
   const resetTournament = () => {
     applyState(createInitialAppState());
     setActiveDay('day1');
@@ -932,6 +1086,30 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     return () => lifecycle.abort();
   }, [isAdmin]);
 
+  const reviewPendingResult = async (id: number, decision: 'approve' | 'reject') => {
+    if (dirty) { setReviewError('保存中の変更があります。保存完了後に確認してください。'); return; }
+    setReviewBusyId(id);
+    setReviewError('');
+    try {
+      const response = await fetch('/api/result-submissions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: decision, id }),
+      });
+      const result = await response.json() as { error?: string; snapshot?: { state: AppState } | null };
+      if (!response.ok) throw new Error(result.error || '報告を処理できませんでした。');
+      if (result.snapshot) setState(normalizeAppState(result.snapshot.state));
+      const reviewed = pendingResults.find((entry) => entry.id === id);
+      setPendingResults((previous) => previous.filter((item) => decision === 'approve' && reviewed
+        ? !(item.day === reviewed.day && item.matchId === reviewed.matchId)
+        : item.id !== id));
+      setSaveStatus('saved');
+    } catch (cause) {
+      setReviewError(cause instanceof Error ? cause.message : '報告を処理できませんでした。');
+    } finally {
+      setReviewBusyId(null);
+    }
+  };
   const isGrandFinalView = division === 2 && d2View === 'grand';
   const divisionLabel = `${division}部`;
   const displayPrefix = division === 2 ? selectedBlock : undefined;
@@ -1015,6 +1193,8 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             <TabsTrigger value="schedule"><Timer size={16} /><span>進行表</span></TabsTrigger>
             {isAdmin ? <TabsTrigger value="practice"><MapPin size={16} /><span>練習コート</span></TabsTrigger> : null}
             {isAdmin ? <TabsTrigger value="scores"><CircleDot size={16} /><span>結果入力</span><em>{currentCompleted}/{currentMatchTarget}</em></TabsTrigger> : null}
+            {!isAdmin ? <TabsTrigger value="report" aria-label="結果を報告" title="結果を報告"><UploadCloud size={16} /><span>結果を報告</span></TabsTrigger> : null}
+            {isAdmin ? <TabsTrigger value="reports" aria-label="報告確認" title="報告確認"><UploadCloud size={16} /><span>報告確認</span><em>{pendingResults.length}</em></TabsTrigger> : null}
             <TabsTrigger value="ranking"><Medal size={16} /><span>最終順位</span></TabsTrigger>
           </TabsList>
 
@@ -1092,11 +1272,11 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
             {isGrandFinalView
-              ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} />
-              : <BracketBoard bracket={activeBracket} editable={false} displayPrefix={displayPrefix} onScore={updateScore} />}
+              ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+              : <BracketBoard bracket={activeBracket} editable={false} displayPrefix={displayPrefix} onScore={updateScore} onGame={updateGameScore} />}
             {isAdmin ? <div className="panel-actions">
               <Button disabled={isGrandFinalView ? !grandFinalTeams[0] || !grandFinalTeams[1] : !blockReady} onClick={() => setActiveTab('scores')}>試合結果を入力 <ArrowRight size={16} /></Button>
-            </div> : null}
+            </div> : <div className="panel-actions"><Button onClick={() => setActiveTab('report')}>試合結果を報告 <ArrowRight size={16} /></Button></div>}
           </TabsContent>
 
           <TabsContent value="schedule" className="panel panel--wide">
@@ -1140,8 +1320,24 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
                 </section>
               ))}
             </div>
+            {!isAdmin ? <div className="panel-actions"><Button onClick={() => setActiveTab('report')}>試合結果を報告 <ArrowRight size={16} /></Button></div> : null}
           </TabsContent>
 
+          {!isAdmin ? <TabsContent value="report" className="panel panel--wide">
+            <div className="panel-heading">
+              <div><span>{tournamentContext} · {divisionLabel}</span><h2>試合結果を報告</h2><p>各団体戦の3対戦分のゲーム数を入力してください。管理者が確認すると、トーナメントと順位へ反映されます。</p></div>
+              <UploadCloud size={30} />
+            </div>
+            {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
+            <div className="report-grid">
+              {scheduleRows(activeTournament, division).filter((row) => {
+                if (!row.teamA || !row.teamB) return false;
+                if (division !== 2) return true;
+                return d2View === 'grand' ? row.id === 'D2-GF' : row.id.startsWith(`D2-${d2View}-`);
+              }).map((row) => <ResultReportCard key={`${activeDay}-${row.id}-${row.teamA}-${row.teamB}`} row={row} day={activeDay} />)}
+            </div>
+            {scheduleRows(activeTournament, division).every((row) => !row.teamA || !row.teamB) ? <p className="grand-final-note">対戦チームが決まると、ここから報告できます。</p> : null}
+          </TabsContent> : null}
           {isAdmin ? <TabsContent value="scores" className="panel panel--wide">
             <div className="panel-heading">
               <div><span>STEP 04 · {divisionLabel}</span><h2>試合結果入力</h2><p>修正で出場チームが変わる後続試合は、自動的に未入力へ戻ります。</p></div>
@@ -1149,13 +1345,34 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
             {isGrandFinalView
-              ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable onScore={updateGrandFinalScore} />
-              : <BracketBoard bracket={activeBracket} editable displayPrefix={displayPrefix} onScore={updateScore} />}
+              ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+              : <BracketBoard bracket={activeBracket} editable displayPrefix={displayPrefix} onScore={updateScore} onGame={updateGameScore} />}
             <div className="panel-actions">
               <Button disabled={!divisionFinished} onClick={() => setActiveTab('ranking')}>最終順位を見る <ArrowRight size={16} /></Button>
             </div>
           </TabsContent> : null}
 
+          {isAdmin ? <TabsContent value="reports" className="panel panel--wide">
+            <div className="panel-heading">
+              <div><span>管理者確認</span><h2>参加者からの結果報告</h2><p>3対戦のゲーム数を確認し、承認した結果だけを大会へ反映します。</p></div>
+              <UploadCloud size={30} />
+            </div>
+            {dirty ? <p className="score-error">画面上の変更を保存中です。保存完了後に承認できます。</p> : null}
+            {reviewError ? <p className="score-error" role="alert">{reviewError}</p> : null}
+            {pendingResults.length ? <div className="pending-grid">{pendingResults.map((report) => {
+              const tally = tallyGames(report.games);
+              return <article className="pending-card" key={report.id}>
+                <div className="match-card__head"><div><span className="match-id">{report.day === 'day1' ? '1日目' : '2日目'} · {report.matchId}</span><h3>{report.teamA} 対 {report.teamB}</h3></div><span className="status status--ready">確認待ち</span></div>
+                <p className="pending-card__meta">報告：{report.submittedBy} · {report.submittedAt}</p>
+                <GameDetails games={report.games} teamA={report.teamA} teamB={report.teamB} editable={false} ready onChange={() => {}} />
+                <p className="pending-card__sets">団体戦：{tally.a} - {tally.b}</p>
+                <div className="pending-card__actions">
+                  <Button type="button" disabled={dirty || reviewBusyId !== null} onClick={() => reviewPendingResult(report.id, 'approve')}>承認して反映</Button>
+                  <Button type="button" variant="outline" disabled={reviewBusyId !== null} onClick={() => reviewPendingResult(report.id, 'reject')}>却下</Button>
+                </div>
+              </article>;
+            })}</div> : <p className="grand-final-note">確認待ちの報告はありません。</p>}
+          </TabsContent> : null}
           <TabsContent value="ranking" className="panel">
             <div className="panel-heading">
               <div><span>STEP 05 · {divisionLabel}</span><h2>{division === 2 && d2View === 'grand' ? '2部 総合結果' : '最終順位'}</h2><p>{division === 2 ? 'A・B各ブロックの順位を保持し、総合決勝は優勝・準優勝のみ決定します。' : blockFinished ? '全12試合が終了し、最終順位が確定しました。' : `順位確定まであと${12 - blockCompleted}試合です。`}</p></div>
@@ -1164,7 +1381,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
             {isGrandFinalView ? (
               <div className="overall-result">
-                <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} />
+                <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
                 <div className="overall-podium">
                   <div className="overall-podium__winner"><Crown size={28} /><span>2部 総合優勝</span><strong>{grandFinalResolved.winner || '未確定'}</strong></div>
                   <div><Medal size={24} /><span>2部 総合準優勝</span><strong>{grandFinalResolved.loser || '未確定'}</strong></div>

@@ -3,7 +3,12 @@ export type MatchId =
   | 'M05' | 'M06' | 'M07' | 'M08'
   | 'M09' | 'M10' | 'M11' | 'M12';
 
-export type Score = { a: string; b: string };
+export type GameScore = { a: string; b: string };
+export type Score = GameScore & { games?: [GameScore, GameScore, GameScore] };
+
+export function createEmptyGames(): [GameScore, GameScore, GameScore] {
+  return [{ a: '', b: '' }, { a: '', b: '' }, { a: '', b: '' }];
+}
 export type MatchSource =
   | { type: 'seed'; seed: number }
   | { type: 'winner' | 'loser'; matchId: MatchId };
@@ -60,11 +65,61 @@ export function shuffleTeams(teams: string[], random: () => number = Math.random
   return shuffled;
 }
 
+function gameNumber(value: string): number | null {
+  if (!/^\d{1,2}$/.test(value)) return null;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 && number <= 99 ? number : null;
+}
+
+export function gameWinner(game: GameScore): 'a' | 'b' | null {
+  const a = gameNumber(game.a);
+  const b = gameNumber(game.b);
+  if (a === null || b === null || a === b) return null;
+  return a > b ? 'a' : 'b';
+}
+
+export function tallyGames(games: readonly GameScore[]) {
+  const winners = games.map(gameWinner);
+  const played = winners.filter(Boolean).length;
+  return {
+    a: played ? String(winners.filter((winner) => winner === 'a').length) : '',
+    b: played ? String(winners.filter((winner) => winner === 'b').length) : '',
+    complete: games.length === 3 && played === 3,
+  };
+}
+
+export function scoreFromGames(games: [GameScore, GameScore, GameScore]): Score {
+  const tally = tallyGames(games);
+  return { a: tally.a, b: tally.b, games: games.map((game) => ({ ...game })) as [GameScore, GameScore, GameScore] };
+}
+
+export function normalizeScore(value?: Partial<Score>): Score {
+  if (Array.isArray(value?.games) && value.games.length === 3) {
+    const games = value.games.map((game) => ({
+      a: typeof game?.a === 'string' ? game.a : '',
+      b: typeof game?.b === 'string' ? game.b : '',
+    })) as [GameScore, GameScore, GameScore];
+    return scoreFromGames(games);
+  }
+  return {
+    a: typeof value?.a === 'string' ? value.a : '',
+    b: typeof value?.b === 'string' ? value.b : '',
+  };
+}
+
+export function scoreHasInput(score: Score): boolean {
+  return score.a !== '' || score.b !== '' || Boolean(score.games?.some((game) => game.a !== '' || game.b !== ''));
+}
+
 export function scoreWinner(score: Score): 'a' | 'b' | null {
-  if (score.a === '' || score.b === '') return null;
-  const a = Number(score.a);
-  const b = Number(score.b);
-  if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b < 0 || a === b) return null;
+  if (score.games) {
+    const tally = tallyGames(score.games);
+    if (!tally.complete) return null;
+    return Number(tally.a) > Number(tally.b) ? 'a' : 'b';
+  }
+  const a = gameNumber(score.a);
+  const b = gameNumber(score.b);
+  if (a === null || b === null || a === b) return null;
   return a > b ? 'a' : 'b';
 }
 
@@ -99,7 +154,7 @@ export function reconcileScores(previous: BracketState, next: BracketState): Bra
     const participantsChanged =
       before[match.id].teamA !== after[match.id].teamA ||
       before[match.id].teamB !== after[match.id].teamB;
-    if (participantsChanged && (scores[match.id].a !== '' || scores[match.id].b !== '')) {
+    if (participantsChanged && scoreHasInput(scores[match.id])) {
       scores[match.id] = { a: '', b: '' };
       working = { ...working, scores };
     }
@@ -139,4 +194,3 @@ export function resolveGrandFinal(teams: [string, string], score: Score) {
     loser: outcome === 'a' ? teams[1] : outcome === 'b' ? teams[0] : '',
   };
 }
-
