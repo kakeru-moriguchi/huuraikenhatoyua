@@ -69,4 +69,6 @@ void test('同勝数では対戦差とゲーム差を使い、完全同率は同
   assert.equal(standings[1].team, 'B');
   assert.equal(standings[0].wins, standings[1].wins);
   assert.ok(standings[0].matchDiff > standings[1].matchDiff);
+  assert.deepEqual([standings[0].matchesFor, standings[0].matchesAgainst, standings[0].gamesFor, standings[0].gamesAgainst], [3, 0, 12, 0]);
+  assert.deepEqual([standings[1].matchesFor, standings[1].matchesAgainst, standings[1].gamesFor, standings[1].gamesAgainst], [2, 1, 10, 10]);
 });

@@ -429,15 +429,23 @@ function LeagueBoard({ league, editable, onGame }: {
   </div>;
 }
 
-function LeagueStandings({ league }: { league: LeagueState }) {
+function LeagueStandings({ league, onShowMatches }: { league: LeagueState; onShowMatches: () => void }) {
   const standings = leagueStandings(league);
+  const completed = LEAGUE_MATCHES.filter((match) => Boolean(leagueMatch(league, match).winner)).length;
+  const signed = (value: number) => `${value > 0 ? '+' : ''}${value}`;
   return <div className="league-standings">
-    <p className="hint">順位基準：団体戦の勝数 → 対戦の得失差 → ゲームの得失差。同じ場合は同率です。</p>
-    <div className="league-standings__head"><span>順位</span><span>チーム</span><span>試合</span><span>勝</span><span>敗</span><span>対戦差</span><span>ゲーム差</span></div>
-    {standings.map((row, index) => <div className="league-standings__row" key={`${row.team}-${index}`}>
-      <strong>{row.rank}位</strong><strong>{row.team}</strong><span>{row.played}</span><span>{row.wins}</span><span>{row.losses}</span><span>{row.matchDiff > 0 ? '+' : ''}{row.matchDiff}</span><span>{row.gameDiff > 0 ? '+' : ''}{row.gameDiff}</span>
-    </div>)}
-    {!standings.length ? <p className="grand-final-note">チームを登録すると順位表を表示します。</p> : null}
+    <div className="league-standings__bar"><strong>女子3部リーグ</strong><span>{completed} / 15 試合終了</span></div>
+    <div className="league-standings__scroll" tabIndex={0} aria-label="女子3部リーグ順位表。横にスクロールして得失数を確認できます。">
+      <table>
+        <thead><tr><th scope="col">順位</th><th scope="col">チーム</th><th scope="col">試合</th><th scope="col">勝</th><th scope="col">負</th><th scope="col">得対戦</th><th scope="col">失対戦</th><th scope="col">対戦差</th><th scope="col">得ゲーム</th><th scope="col">失ゲーム</th><th scope="col">ゲーム差</th></tr></thead>
+        <tbody>{standings.map((row, index) => <tr className={row.rank === 1 ? 'league-standings__leader' : ''} key={`${row.team}-${index}`}>
+          <td><strong>{row.rank}</strong></td><th scope="row">{row.team}</th><td>{row.played}</td><td className="league-standings__win">{row.wins}</td><td>{row.losses}</td><td>{row.matchesFor}</td><td>{row.matchesAgainst}</td><td>{signed(row.matchDiff)}</td><td>{row.gamesFor}</td><td>{row.gamesAgainst}</td><td>{signed(row.gameDiff)}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+    {!standings.length ? <p className="grand-final-note">6チームを登録すると順位表を表示します。</p> : null}
+    <div className="league-standings__footer"><button type="button" onClick={onShowMatches}>▸ リーグ戦の試合結果を見る</button></div>
+    <p className="league-standings__rule">順位基準：団体戦の勝数 → 対戦差 → ゲーム差。すべて同じ場合は同率です。</p>
   </div>;
 }
 
@@ -1466,7 +1474,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               <Trophy size={30} />
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
-            {isFemaleLeague ? <LeagueStandings league={activeTournament.league3} /> : isGrandFinalView ? (
+            {isFemaleLeague ? <LeagueStandings league={activeTournament.league3} onShowMatches={() => setActiveTab('bracket')} /> : isGrandFinalView ? (
               <div className="overall-result">
                 <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
                 <div className="overall-podium">

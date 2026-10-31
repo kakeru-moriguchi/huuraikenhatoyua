@@ -51,12 +51,16 @@ export type LeagueStanding = {
   played: number;
   wins: number;
   losses: number;
+  matchesFor: number;
+  matchesAgainst: number;
   matchDiff: number;
+  gamesFor: number;
+  gamesAgainst: number;
   gameDiff: number;
 };
 
 export function leagueStandings(state: LeagueState): LeagueStanding[] {
-  const rows = state.teams.map((team) => ({ rank: 0, team: team.trim(), played: 0, wins: 0, losses: 0, matchDiff: 0, gameDiff: 0 }));
+  const rows = state.teams.map((team) => ({ rank: 0, team: team.trim(), played: 0, wins: 0, losses: 0, matchesFor: 0, matchesAgainst: 0, matchDiff: 0, gamesFor: 0, gamesAgainst: 0, gameDiff: 0 }));
   for (const match of LEAGUE_MATCHES) {
     const { teamA, teamB, score, winner } = leagueMatch(state, match);
     if (!teamA || !teamB || !winner) continue;
@@ -66,9 +70,13 @@ export function leagueStandings(state: LeagueState): LeagueStanding[] {
     if (winner === teamA) { a.wins += 1; b.losses += 1; }
     else { b.wins += 1; a.losses += 1; }
     const matchDiff = Number(score.a) - Number(score.b);
+    a.matchesFor += Number(score.a); a.matchesAgainst += Number(score.b);
+    b.matchesFor += Number(score.b); b.matchesAgainst += Number(score.a);
     a.matchDiff += matchDiff; b.matchDiff -= matchDiff;
     for (const game of score.games ?? []) {
       const gameDiff = Number(game.a) - Number(game.b);
+      a.gamesFor += Number(game.a); a.gamesAgainst += Number(game.b);
+      b.gamesFor += Number(game.b); b.gamesAgainst += Number(game.a);
       a.gameDiff += gameDiff; b.gameDiff -= gameDiff;
     }
   }
