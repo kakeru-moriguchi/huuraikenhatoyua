@@ -65,6 +65,7 @@ import {
   createInitialAppState,
   migratePreviousState,
   normalizeAppState,
+  practiceTeamKey,
   type AppState,
   type BlockId,
   type CourtSettings,
@@ -854,7 +855,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     });
   };
 
-  const updatePracticeCourt = (team: string, court: string) => {
+  const updatePracticeCourt = (group: PracticeGroupId, team: string, court: string) => {
     applyState((previous) => {
       const tournament = previous.tournaments[activeDay];
       return {
@@ -863,7 +864,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           ...previous.tournaments,
           [activeDay]: {
             ...tournament,
-            practiceCourts: { ...tournament.practiceCourts, [team]: court },
+            practiceCourts: { ...tournament.practiceCourts, [practiceTeamKey(group, team)]: court },
           },
         },
       };
@@ -887,9 +888,10 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
       };
     });
   };
-  const updateTeamPracticeTime = (team: string, field: 'start' | 'end', value: string) => {
+  const updateTeamPracticeTime = (group: PracticeGroupId, team: string, field: 'start' | 'end', value: string) => {
     applyState((previous) => {
       const tournament = previous.tournaments[activeDay];
+      const key = practiceTeamKey(group, team);
       return {
         ...previous,
         tournaments: {
@@ -898,7 +900,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             ...tournament,
             teamPracticeTimes: {
               ...tournament.teamPracticeTimes,
-              [team]: { ...{ start: '', end: '' }, ...tournament.teamPracticeTimes[team], [field]: value },
+              [key]: { ...{ start: '', end: '' }, ...tournament.teamPracticeTimes[key], [field]: value },
             },
           },
         },
@@ -1402,13 +1404,13 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
                       <div className="practice-court-row" key={`${group.label}-${team}-${index}`}>
                         <strong>{team}</strong>
                         {isAdmin
-                          ? <Input aria-label={`${team}の練習コート`} value={activeTournament.practiceCourts[team] || ''} maxLength={24} placeholder="例：第4コート" onChange={(event) => updatePracticeCourt(team, event.target.value)} />
-                          : <span><MapPin size={15} />{activeTournament.practiceCourts[team] || '未設定'}</span>}
+                          ? <Input aria-label={`${group.label} ${team}の練習コート`} value={activeTournament.practiceCourts[practiceTeamKey(group.id, team)] || ''} maxLength={24} placeholder="例：第4コート" onChange={(event) => updatePracticeCourt(group.id, team, event.target.value)} />
+                          : <span><MapPin size={15} />{activeTournament.practiceCourts[practiceTeamKey(group.id, team)] || '未設定'}</span>}
                         {isAdmin ? <div className="practice-court-row__time">
-                          <label>開始 <Input aria-label={`${team}の練習開始時刻`} type="time" value={activeTournament.teamPracticeTimes[team]?.start || ''} onChange={(event) => updateTeamPracticeTime(team, 'start', event.target.value)} /></label>
+                          <label>開始 <Input aria-label={`${group.label} ${team}の練習開始時刻`} type="time" value={activeTournament.teamPracticeTimes[practiceTeamKey(group.id, team)]?.start || ''} onChange={(event) => updateTeamPracticeTime(group.id, team, 'start', event.target.value)} /></label>
                           <span>～</span>
-                          <label>終了 <Input aria-label={`${team}の練習終了時刻`} type="time" value={activeTournament.teamPracticeTimes[team]?.end || ''} onChange={(event) => updateTeamPracticeTime(team, 'end', event.target.value)} /></label>
-                        </div> : <span className="practice-court-row__time--read"><Timer size={15} />{activeTournament.teamPracticeTimes[team]?.start || activeTournament.practiceTimes[group.id].start || '未設定'}～{activeTournament.teamPracticeTimes[team]?.end || activeTournament.practiceTimes[group.id].end || '未設定'}</span>}
+                          <label>終了 <Input aria-label={`${group.label} ${team}の練習終了時刻`} type="time" value={activeTournament.teamPracticeTimes[practiceTeamKey(group.id, team)]?.end || ''} onChange={(event) => updateTeamPracticeTime(group.id, team, 'end', event.target.value)} /></label>
+                        </div> : <span className="practice-court-row__time--read"><Timer size={15} />{activeTournament.teamPracticeTimes[practiceTeamKey(group.id, team)]?.start || activeTournament.practiceTimes[group.id].start || '未設定'}～{activeTournament.teamPracticeTimes[practiceTeamKey(group.id, team)]?.end || activeTournament.practiceTimes[group.id].end || '未設定'}</span>}
                       </div>
                     ))}
                   </div> : <p className="practice-court-empty">チーム未登録</p>}

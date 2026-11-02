@@ -23,6 +23,24 @@ export type PracticeGroupId = 'division1' | 'division2A' | 'division2B' | 'divis
 export type PracticeTime = { start: string; end: string };
 export type PracticeTimes = Record<PracticeGroupId, PracticeTime>;
 
+export function practiceTeamKey(group: PracticeGroupId, team: string): string {
+  return JSON.stringify([group, team.trim()]);
+}
+
+function scopePracticeAssignments<T>(values: Record<string, T>, groups: Record<PracticeGroupId, string[]>): Record<string, T> {
+  const scoped = { ...values };
+  for (const [group, teams] of Object.entries(groups) as Array<[PracticeGroupId, string[]]>) {
+    for (const team of teams) {
+      const name = team.trim();
+      if (!name || !Object.hasOwn(values, name)) continue;
+      const key = practiceTeamKey(group, name);
+      if (!Object.hasOwn(scoped, key)) scoped[key] = structuredClone(values[name]);
+      delete scoped[name];
+    }
+  }
+  return scoped;
+}
+
 function normalizeTeamPracticeTimes(value?: Record<string, unknown>): Record<string, PracticeTime> {
   if (!value || typeof value !== 'object') return {};
   return Object.fromEntries(Object.entries(value)
@@ -191,31 +209,40 @@ export function createInitialAppState(): AppState {
 export function normalizeTournament(
   value: Partial<TournamentState> | undefined,
   fallback: TournamentState,
+  day: TournamentDayId,
 ): TournamentState {
   const divisionTwo = value?.divisions?.[2];
   const league = value?.league3;
   const leagueTeams = league?.teams ?? value?.divisions?.[3]?.teams ?? [];
+  const divisions = {
+    1: normalizeBracket(value?.divisions?.[1]),
+    2: {
+      A: normalizeBracket(divisionTwo?.A),
+      B: normalizeBracket(divisionTwo?.B),
+      grandFinal: normalizeScore(divisionTwo?.grandFinal),
+    },
+    3: normalizeBracket(value?.divisions?.[3]),
+  };
+  const league3 = {
+    teams: Array.from({ length: 6 }, (_, index) => typeof leagueTeams[index] === 'string' ? leagueTeams[index] : ''),
+    scores: Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [id, normalizeScore(league?.scores?.[id])])) as LeagueState['scores'],
+  };
+  const practiceGroups: Record<PracticeGroupId, string[]> = {
+    division1: divisions[1].teams,
+    division2A: divisions[2].A.teams,
+    division2B: divisions[2].B.teams,
+    division3: day === 'day2' ? league3.teams : divisions[3].teams,
+  };
   return {
     name: typeof value?.name === 'string' ? value.name : fallback.name,
     category: typeof value?.category === 'string' ? value.category : fallback.category,
     date: typeof value?.date === 'string' ? value.date : '',
-    divisions: {
-      1: normalizeBracket(value?.divisions?.[1]),
-      2: {
-        A: normalizeBracket(divisionTwo?.A),
-        B: normalizeBracket(divisionTwo?.B),
-        grandFinal: normalizeScore(divisionTwo?.grandFinal),
-      },
-      3: normalizeBracket(value?.divisions?.[3]),
-    },
-    league3: {
-      teams: Array.from({ length: 6 }, (_, index) => typeof leagueTeams[index] === 'string' ? leagueTeams[index] : ''),
-      scores: Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [id, normalizeScore(league?.scores?.[id])])) as LeagueState['scores'],
-    },
+    divisions,
+    league3,
     courts: normalizeCourts(value?.courts),
-    practiceCourts: normalizePracticeCourts(value?.practiceCourts),
+    practiceCourts: scopePracticeAssignments(normalizePracticeCourts(value?.practiceCourts), practiceGroups),
     practiceTimes: normalizePracticeTimes(value?.practiceTimes),
-    teamPracticeTimes: normalizeTeamPracticeTimes(value?.teamPracticeTimes),
+    teamPracticeTimes: scopePracticeAssignments(normalizeTeamPracticeTimes(value?.teamPracticeTimes), practiceGroups),
     schedule: normalizeSchedule(value?.schedule),
   };
 }
@@ -225,8 +252,8 @@ export function normalizeAppState(value?: Partial<AppState>): AppState {
   return {
     version: 6,
     tournaments: {
-      day1: normalizeTournament(value?.tournaments?.day1, fallback.tournaments.day1),
-      day2: normalizeTournament(value?.tournaments?.day2, fallback.tournaments.day2),
+      day1: normalizeTournament(value?.tournaments?.day1, fallback.tournaments.day1, 'day1'),
+      day2: normalizeTournament(value?.tournaments?.day2, fallback.tournaments.day2, 'day2'),
     },
   };
 }

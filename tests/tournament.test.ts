@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyDivisionCourt, createInitialAppState, migratePreviousState, normalizeAppState } from '../lib/event.ts';
+import { applyDivisionCourt, createInitialAppState, migratePreviousState, normalizeAppState, practiceTeamKey } from '../lib/event.ts';
 import {
   createEmptyBracket,
   getRanking,
@@ -108,6 +108,31 @@ void test('1日目と2日目の大会データは完全に独立している', (
   assert.deepEqual(state.tournaments.day2.teamPracticeTimes, {});
   assert.equal(state.tournaments.day1.category, '男子');
   assert.equal(state.tournaments.day2.category, '女子');
+});
+
+void test('同じ学校名でも部門・ブロック別の練習コートと個別時間を保持する', () => {
+  const state = createInitialAppState();
+  const tournament = state.tournaments.day1;
+  tournament.divisions[1].teams[0] = '同じ学校';
+  tournament.divisions[3].teams[0] = '同じ学校';
+  tournament.divisions[2].A.teams[0] = '同じ学校';
+  tournament.practiceCourts['同じ学校'] = '旧コート';
+  tournament.teamPracticeTimes['同じ学校'] = { start: '08:00', end: '08:45' };
+  const migrated = normalizeAppState(state);
+  const first = practiceTeamKey('division1', '同じ学校');
+  const third = practiceTeamKey('division3', '同じ学校');
+  const blockA = practiceTeamKey('division2A', '同じ学校');
+  assert.equal(migrated.tournaments.day1.practiceCourts[first], '旧コート');
+  assert.equal(migrated.tournaments.day1.practiceCourts[third], '旧コート');
+  assert.equal(migrated.tournaments.day1.practiceCourts[blockA], '旧コート');
+  assert.equal(migrated.tournaments.day1.practiceCourts['同じ学校'], undefined);
+  migrated.tournaments.day1.practiceCourts[first] = '1部コート';
+  migrated.tournaments.day1.teamPracticeTimes[first].start = '09:00';
+  const saved = normalizeAppState(migrated);
+  assert.equal(saved.tournaments.day1.practiceCourts[third], '旧コート');
+  assert.equal(saved.tournaments.day1.practiceCourts[blockA], '旧コート');
+  assert.equal(saved.tournaments.day1.teamPracticeTimes[third].start, '08:00');
+  assert.equal(saved.tournaments.day1.practiceCourts[first], '1部コート');
 });
 
 void test('大会データに男女それぞれの進行表枠があり、旧データには空欄を自動補完する', () => {
