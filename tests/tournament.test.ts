@@ -137,9 +137,9 @@ void test('同じ学校名でも部門・ブロック別の練習コートと個
 
 void test('大会データに男女それぞれの進行表枠があり、旧データには空欄を自動補完する', () => {
   const current = createInitialAppState();
-  assert.equal(Object.keys(current.tournaments.day1.schedule).length, 64);
+  assert.equal(Object.keys(current.tournaments.day1.schedule).length, 58);
   assert.ok(current.tournaments.day1.schedule['D2-GF']);
-  assert.ok(current.tournaments.day2.schedule['D3-L15']);
+  assert.ok(current.tournaments.day2.schedule['D3-L09']);
 
   const legacyLike = structuredClone(current) as unknown as Record<string, unknown>;
   const tournaments = legacyLike.tournaments as Record<string, Record<string, unknown>>;

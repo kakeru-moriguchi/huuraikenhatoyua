@@ -224,8 +224,10 @@ export function normalizeTournament(
     3: normalizeBracket(value?.divisions?.[3]),
   };
   const league3 = {
+    format: 'two_groups' as const,
     teams: Array.from({ length: 6 }, (_, index) => typeof leagueTeams[index] === 'string' ? leagueTeams[index] : ''),
-    scores: Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [id, normalizeScore(league?.scores?.[id])])) as LeagueState['scores'],
+    scores: Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [id, league?.format === 'two_groups' ? normalizeScore(league.scores?.[id]) : { a: '', b: '' }])) as LeagueState['scores'],
+    rankOverrides: league?.format === 'two_groups' ? league.rankOverrides : undefined,
   };
   const practiceGroups: Record<PracticeGroupId, string[]> = {
     division1: divisions[1].teams,
@@ -243,7 +245,10 @@ export function normalizeTournament(
     practiceCourts: scopePracticeAssignments(normalizePracticeCourts(value?.practiceCourts), practiceGroups),
     practiceTimes: normalizePracticeTimes(value?.practiceTimes),
     teamPracticeTimes: scopePracticeAssignments(normalizeTeamPracticeTimes(value?.teamPracticeTimes), practiceGroups),
-    schedule: normalizeSchedule(value?.schedule),
+    schedule: normalizeSchedule(league?.format === 'two_groups' || day === 'day1' ? value?.schedule : {
+      ...value?.schedule,
+      ...Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [`D3-${id}`, { startTime: '', court: value?.courts?.division3 ?? '' }])),
+    }),
   };
 }
 

@@ -1,6 +1,6 @@
 import { SCHEDULE_MATCH_IDS, type AppState, type ScheduleMatchId, type TournamentDayId, type TournamentState } from './event.ts';
 import { MATCH_IDS, gameWinner, reconcileGrandFinal, reconcileScores, resolveTournament, scoreFromGames, type GameScore, type MatchId, type Score } from './tournament.ts';
-import { LEAGUE_MATCHES, leagueMatch, type LeagueMatchId } from './league.ts';
+import { LEAGUE_MATCHES, leagueMatch, reconcileLeagueScores, type LeagueMatchId } from './league.ts';
 
 export type ResultReport = {
   day: TournamentDayId;
@@ -83,7 +83,7 @@ export function applyApprovedReport(state: AppState, report: ResultReport): AppS
   const target = next.tournaments[report.day];
   const score = scoreFromGames(report.games);
   if (report.day === 'day2' && report.matchId.startsWith('D3-L')) {
-    target.league3.scores[report.matchId.slice(3) as LeagueMatchId] = score;
+    target.league3 = reconcileLeagueScores(target.league3, { ...target.league3, scores: { ...target.league3.scores, [report.matchId.slice(3) as LeagueMatchId]: score } });
     return next;
   }
   if (report.matchId === 'D2-GF') {

@@ -161,6 +161,61 @@ button, input { font: inherit; }
 .block-nav button { min-height: 39px; display: flex; flex: 1; align-items: center; justify-content: center; gap: 7px; padding: 7px 12px; color: #64736f; background: transparent; border: 0; border-radius: 9px; font-size: .78rem; font-weight: 750; cursor: pointer; }
 .block-nav button[aria-pressed='true'] { color: var(--brand-main); background: #fff; box-shadow: 0 4px 12px var(--brand-shadow); }
 .bracket-grid { display: grid; grid-template-columns: repeat(3, minmax(270px,1fr)); gap: 16px; overflow-x: auto; padding-bottom: 8px; }
+.diagram-scroll { max-width: 100%; overflow-x: auto; padding-bottom: 12px; }
+.diagram-scroll:focus-visible { outline: 3px solid var(--brand-accent); outline-offset: -3px; }
+.bracket-diagram { width: 1036px; height: 1040px; position: relative; margin: 0 auto; }
+.bracket-diagram__lines { position: absolute; inset: 0; width: 1036px; height: 1040px; pointer-events: none; }
+.bracket-diagram__lines path { fill: none; stroke: var(--brand-border); stroke-width: 2; }
+.bracket-diagram__label { position: absolute; color: var(--brand-text); font-size: .79rem; }
+.diagram-match, .bracket-diagram__source, .diagram-result { position: absolute; width: 223px; height: 82px; border: 1px solid var(--brand-border); border-radius: 9px; background: #fff; box-shadow: 0 3px 10px var(--brand-shadow-soft); }
+.diagram-match { overflow: hidden; }
+.diagram-match__title { height: 22px; display: flex; align-items: center; gap: 7px; padding: 2px 8px; color: var(--brand-text); background: var(--brand-softest); font-size: .61rem; }
+.diagram-match__title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diagram-match > div:not(.diagram-match__title) { height: 29px; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 2px 8px; border-top: 1px solid var(--border); font-size: .72rem; }
+.diagram-match > div:not(.diagram-match__title) span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diagram-match__winner { color: var(--brand-text); background: var(--brand-softest); font-weight: 800; }
+.diagram-match b { flex: none; }
+.bracket-diagram__source { display: grid; place-items: center; color: var(--brand-muted-text); background: var(--brand-field); font-size: .72rem; font-weight: 750; }
+.diagram-result { display: grid; grid-template-rows: 1fr 1fr; overflow: hidden; }
+.diagram-result > div { display: flex; align-items: center; gap: 8px; padding: 2px 9px; font-size: .72rem; }
+.diagram-result > div + div { border-top: 1px solid var(--border); }
+.diagram-result b { flex: none; color: var(--brand-text); }
+.diagram-result span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diagram-details { margin-top: 16px; }
+.diagram-details > summary { padding: 12px 16px; color: var(--brand-text); background: var(--brand-field); border: 1px solid var(--border); border-radius: 10px; font-size: .78rem; font-weight: 800; cursor: pointer; }
+.diagram-details[open] > .bracket-grid { margin-top: 15px; }
+.league-overview { display: grid; gap: 28px; }
+.league-registration { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.league-registration section { padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--brand-field); }
+.league-registration h3 { display: flex; justify-content: space-between; margin: 0 0 12px; color: var(--brand-text); font-size: .89rem; }
+.league-registration h3 span { font-size: .7rem; }
+.league-registration .team-grid { grid-template-columns: 1fr; }
+.league-overview__groups { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.league-group-table { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
+.league-group-table h3, .league-overview__placements > h3 { margin: 0; padding: 10px 13px; color: #fff; background: var(--brand-main); font-size: .82rem; }
+.league-group-table__scroll { overflow-x: auto; }
+.league-group-table table { width: 100%; min-width: 510px; border-collapse: collapse; font-size: .72rem; }
+.league-group-table th, .league-group-table td { padding: 9px; border: 1px solid var(--border); text-align: center; }
+.league-group-table th:first-child { min-width: 145px; text-align: left; }
+.league-group-table thead { background: var(--brand-softest); color: var(--brand-text); }
+.league-group-table td small, .league-group-table td strong { display: block; }
+.league-group-table td small { max-width: 110px; overflow: hidden; color: var(--brand-muted-text); text-overflow: ellipsis; white-space: nowrap; }
+.league-group-table td strong { margin-top: 3px; }
+.league-overview__placements { overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
+.league-placement { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(160px,.9fr); align-items: stretch; gap: 10px; margin: 13px; }
+.league-placement > div { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--brand-field); }
+.league-placement > div span { color: var(--brand-muted-text); font-size: .68rem; }
+.league-placement > div strong { overflow: hidden; font-size: .79rem; text-overflow: ellipsis; white-space: nowrap; }
+.league-placement__result { color: var(--brand-text); background: var(--brand-softest) !important; }
+.league-placement__result b { font-size: .69rem; }
+.league-tie-controls:empty { display: none; }
+.league-tie-controls section { margin-top: 18px; padding: 16px; border: 1px solid var(--brand-border); border-radius: 12px; background: var(--brand-softest); }
+.league-tie-controls h3 { margin: 0 0 5px; color: var(--brand-text); font-size: .86rem; }
+.league-tie-controls p { margin: 0 0 12px; color: var(--brand-muted-text); font-size: .74rem; }
+.league-tie-controls section > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.league-tie-controls label { display: flex; align-items: center; gap: 6px; color: var(--brand-text); font-size: .75rem; font-weight: 800; }
+.league-tie-controls select { max-width: 180px; min-height: 36px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+@media (max-width: 700px) { .league-overview__groups, .league-registration { grid-template-columns: 1fr; } .league-placement { grid-template-columns: 1fr 1fr; } .league-placement__result { grid-column: 1 / -1; } }
 .round-column { min-width: 270px; }
 .round-title { display: flex; align-items: baseline; gap: 10px; margin: 0 3px 12px; }
 .round-title span { margin: 0; }
@@ -257,6 +312,11 @@ button, input { font: inherit; }
 .league-standings__footer button { padding: 4px 0; color: var(--brand-text); border: 0; background: transparent; font-size: .76rem; font-weight: 800; cursor: pointer; }
 .league-standings__footer button:hover { text-decoration: underline; }
 .league-standings__rule { margin: 0; padding: 9px 14px; color: var(--brand-muted-text); font-size: .7rem; line-height: 1.5; }
+.league-standings .league-group-table table { min-width: 510px; font-size: .72rem; }
+.league-standings .league-group-table th, .league-standings .league-group-table td { min-width: 0; position: static; padding: 9px; background: transparent; }
+.league-standings .league-group-table th:first-child { min-width: 145px; }
+.league-standings .league-group-table thead th { background: var(--brand-softest); }
+.league-standings .league-group-table tbody tr.league-standings__leader { background: transparent; }
 .rank-row { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 14px; min-height: 68px; padding: 10px 18px 10px 10px; background: #f5f7f4; border: 1px solid #e1e6e1; border-radius: 14px; }
 .rank-number { width: 45px; height: 45px; display: grid; place-items: center; color: #fff; background: #73817d; border-radius: 11px; font-family: var(--font-display); font-size: 1.1rem; font-weight: 800; }
 .rank-row div span { display: block; color: #87938f; font-family: var(--font-display); font-size: .58rem; font-weight: 800; letter-spacing: .11em; }
