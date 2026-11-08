@@ -1,6 +1,6 @@
 import { SCHEDULE_MATCH_IDS, type AppState, type ScheduleMatchId, type TournamentDayId, type TournamentState } from './event.ts';
 import { MATCH_IDS, gameWinner, reconcileGrandFinal, reconcileScores, resolveTournament, scoreFromGames, type GameScore, type MatchId, type Score } from './tournament.ts';
-import { LEAGUE_MATCHES, leagueMatch, reconcileLeagueScores, type LeagueMatchId } from './league.ts';
+import { LEAGUE_MATCHES, leagueMatch } from './league.ts';
 
 export type ResultReport = {
   day: TournamentDayId;
@@ -27,7 +27,7 @@ export function parseResultReport(value: unknown): ResultReport {
   const input = value as Record<string, unknown>;
   if (input.day !== 'day1' && input.day !== 'day2') throw new ResultReportError('開催日を選択してください。');
   if (typeof input.matchId !== 'string' || !SCHEDULE_MATCH_IDS.includes(input.matchId as ScheduleMatchId)) throw new ResultReportError('試合を選択してください。');
-  if ((input.day === 'day1' && input.matchId.startsWith('D3-L')) || (input.day === 'day2' && input.matchId.startsWith('D3-M'))) throw new ResultReportError('開催日と試合を確認してください。');
+  if (input.day === 'day1' && input.matchId.startsWith('D3-L')) throw new ResultReportError('開催日と試合を確認してください。');
   if (typeof input.teamA !== 'string' || typeof input.teamB !== 'string' || !input.teamA.trim() || !input.teamB.trim()) throw new ResultReportError('対戦チームを確認してください。');
   if (input.teamA.trim() === input.teamB.trim()) throw new ResultReportError('対戦チームの名前が重複しています。');
   if (typeof input.submittedBy !== 'string' || ![input.teamA, input.teamB].includes(input.submittedBy)) throw new ResultReportError('報告するチームを選択してください。');
@@ -74,6 +74,7 @@ export function getMatchContext(tournament: TournamentState, id: ScheduleMatchId
 }
 
 export function applyApprovedReport(state: AppState, report: ResultReport): AppState {
+  if (report.matchId.startsWith('D3-L')) throw new ResultReportError('旧リーグ戦の報告です。現在のトーナメントには反映できません。', 409);
   const tournament = state.tournaments[report.day];
   const current = getMatchContext(tournament, report.matchId);
   if (!current.teamA || !current.teamB || current.teamA !== report.teamA || current.teamB !== report.teamB) {
@@ -82,10 +83,6 @@ export function applyApprovedReport(state: AppState, report: ResultReport): AppS
   const next = structuredClone(state);
   const target = next.tournaments[report.day];
   const score = scoreFromGames(report.games);
-  if (report.day === 'day2' && report.matchId.startsWith('D3-L')) {
-    target.league3 = reconcileLeagueScores(target.league3, { ...target.league3, scores: { ...target.league3.scores, [report.matchId.slice(3) as LeagueMatchId]: score } });
-    return next;
-  }
   if (report.matchId === 'D2-GF') {
     target.divisions[2].grandFinal = score;
     return next;

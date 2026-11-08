@@ -49,6 +49,7 @@ function rowToPending(row: SubmissionRow): PendingResult {
 
 export async function submitResultReport(value: unknown): Promise<void> {
   const report = parseResultReport(value);
+  if (report.matchId.startsWith('D3-L')) throw new ResultReportError('女子3部はトーナメントに変更されました。画面を更新してください。', 409);
   const snapshot = await getTournamentSnapshot();
   const current = getMatchContext(snapshot.state.tournaments[report.day], report.matchId);
   if (!current.teamA || !current.teamB || current.teamA !== report.teamA || current.teamB !== report.teamB) {

@@ -104,7 +104,7 @@ export type TournamentState = {
 };
 
 export type AppState = {
-  version: 6;
+  version: 7;
   tournaments: Record<TournamentDayId, TournamentState>;
 };
 
@@ -198,7 +198,7 @@ export function createTournament(category: string, name: string): TournamentStat
 
 export function createInitialAppState(): AppState {
   return {
-    version: 6,
+    version: 7,
     tournaments: {
       day1: createTournament('男子', '男子・3部制トーナメント'),
       day2: createTournament('女子', '女子・3部制トーナメント'),
@@ -210,6 +210,7 @@ export function normalizeTournament(
   value: Partial<TournamentState> | undefined,
   fallback: TournamentState,
   day: TournamentDayId,
+  migrateGirlsLeague = false,
 ): TournamentState {
   const divisionTwo = value?.divisions?.[2];
   const league = value?.league3;
@@ -223,6 +224,10 @@ export function normalizeTournament(
     },
     3: normalizeBracket(value?.divisions?.[3]),
   };
+  if (day === 'day2' && migrateGirlsLeague && !divisions[3].teams.some(Boolean)) {
+    divisions[3].teams = Array.from({ length: 8 }, (_, index) =>
+      typeof leagueTeams[index] === 'string' ? leagueTeams[index] : '');
+  }
   const league3 = {
     format: 'two_groups' as const,
     teams: Array.from({ length: 6 }, (_, index) => typeof leagueTeams[index] === 'string' ? leagueTeams[index] : ''),
@@ -233,8 +238,18 @@ export function normalizeTournament(
     division1: divisions[1].teams,
     division2A: divisions[2].A.teams,
     division2B: divisions[2].B.teams,
-    division3: day === 'day2' ? league3.teams : divisions[3].teams,
+    division3: divisions[3].teams,
   };
+  const schedule = normalizeSchedule(league?.format === 'two_groups' || day === 'day1' ? value?.schedule : {
+    ...value?.schedule,
+    ...Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [`D3-${id}`, { startTime: '', court: value?.courts?.division3 ?? '' }])),
+  });
+  if (day === 'day2' && migrateGirlsLeague) {
+    for (const id of MATCH_IDS) {
+      const match = schedule[`D3-${id}`];
+      if (!match.court) match.court = value?.courts?.division3 ?? '';
+    }
+  }
   return {
     name: typeof value?.name === 'string' ? value.name : fallback.name,
     category: typeof value?.category === 'string' ? value.category : fallback.category,
@@ -245,20 +260,17 @@ export function normalizeTournament(
     practiceCourts: scopePracticeAssignments(normalizePracticeCourts(value?.practiceCourts), practiceGroups),
     practiceTimes: normalizePracticeTimes(value?.practiceTimes),
     teamPracticeTimes: scopePracticeAssignments(normalizeTeamPracticeTimes(value?.teamPracticeTimes), practiceGroups),
-    schedule: normalizeSchedule(league?.format === 'two_groups' || day === 'day1' ? value?.schedule : {
-      ...value?.schedule,
-      ...Object.fromEntries(LEAGUE_MATCH_IDS.map((id) => [`D3-${id}`, { startTime: '', court: value?.courts?.division3 ?? '' }])),
-    }),
+    schedule,
   };
 }
 
 export function normalizeAppState(value?: Partial<AppState>): AppState {
   const fallback = createInitialAppState();
   return {
-    version: 6,
+    version: 7,
     tournaments: {
       day1: normalizeTournament(value?.tournaments?.day1, fallback.tournaments.day1, 'day1'),
-      day2: normalizeTournament(value?.tournaments?.day2, fallback.tournaments.day2, 'day2'),
+      day2: normalizeTournament(value?.tournaments?.day2, fallback.tournaments.day2, 'day2', (value?.version ?? 6) < 7),
     },
   };
 }

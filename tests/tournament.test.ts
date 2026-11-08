@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { applyDivisionCourt, createInitialAppState, migratePreviousState, normalizeAppState, practiceTeamKey } from '../lib/event.ts';
+import { applyApprovedReport, parseResultReport } from '../lib/result-submission.ts';
 import {
   createEmptyBracket,
   getRanking,
@@ -147,12 +148,40 @@ void test('大会データに男女それぞれの進行表枠があり、旧デ
   delete tournaments.day1.practiceTimes;
   delete tournaments.day1.teamPracticeTimes;
   const normalized = normalizeAppState(legacyLike as never);
-  assert.equal(normalized.version, 6);
+  assert.equal(normalized.version, 7);
   assert.deepEqual(normalized.tournaments.day1.schedule['D2-A-M09'], { startTime: '', court: '' });
   assert.deepEqual(normalized.tournaments.day1.courts, { practice: '', division1: '', division2: '', division3: '' });
   assert.deepEqual(normalized.tournaments.day1.practiceCourts, {});
   assert.deepEqual(normalized.tournaments.day1.practiceTimes.division2A, { start: '', end: '' });
   assert.deepEqual(normalized.tournaments.day1.teamPracticeTimes, {});
+});
+
+void test('女子3部をリーグから8チームトーナメントへ一度だけ移行する', () => {
+  const previous = createInitialAppState();
+  previous.tournaments.day2.league3.teams = ['A', 'B', 'C', 'D', 'E', 'F'];
+  previous.tournaments.day2.courts.division3 = '第3コート';
+  previous.tournaments.day2.league3.scores.L01 = { a: '2', b: '1' };
+  const migrated = normalizeAppState({ ...previous, version: 6 } as never);
+  assert.deepEqual(migrated.tournaments.day2.divisions[3].teams, ['A', 'B', 'C', 'D', 'E', 'F', '', '']);
+  assert.equal(migrated.tournaments.day2.schedule['D3-M01'].court, '第3コート');
+  assert.equal(migrated.tournaments.day2.league3.scores.L01.a, '2');
+  assert.equal(migrated.tournaments.day1.divisions[3].teams[0], '');
+  migrated.tournaments.day2.divisions[3].teams.fill('');
+  assert.equal(normalizeAppState(migrated).tournaments.day2.divisions[3].teams[0], '');
+});
+
+void test('女子3部の結果承認で1部と同じ次戦へ進む', () => {
+  const state = createInitialAppState();
+  state.tournaments.day2.divisions[3].teams = Array.from({ length: 8 }, (_, index) => `女子${index + 1}`);
+  const report = parseResultReport({
+    day: 'day2', matchId: 'D3-M01', teamA: '女子1', teamB: '女子8', submittedBy: '女子1',
+    games: [{ a: '4', b: '2' }, { a: '4', b: '1' }, { a: '2', b: '4' }],
+  });
+  const next = applyApprovedReport(state, report);
+  const resolved = resolveTournament(next.tournaments.day2.divisions[3]);
+  assert.equal(resolved.M01.winner, '女子1');
+  assert.equal(resolved.M05.teamA, '女子1');
+  assert.equal(state.tournaments.day2.divisions[3].scores.M01.a, '');
 });
 
 void test('部門コートは該当する進行表だけへ一括反映する', () => {

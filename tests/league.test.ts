@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createInitialAppState, normalizeAppState } from '../lib/event.ts';
 import { LEAGUE_MATCHES, createEmptyLeague, groupStandings, leagueMatch, reconcileLeagueScores } from '../lib/league.ts';
-import { applyApprovedReport, getMatchContext, parseResultReport } from '../lib/result-submission.ts';
+import { applyApprovedReport, parseResultReport } from '../lib/result-submission.ts';
 import { scoreFromGames } from '../lib/tournament.ts';
 
 const win = () => scoreFromGames([{ a: '4', b: '2' }, { a: '4', b: '1' }, { a: '2', b: '4' }]);
@@ -37,18 +37,17 @@ void test('グループ順位が決まると1位・2位・3位同士を自動配
   assert.deepEqual([leagueMatch(league, LEAGUE_MATCHES[8]).teamA, leagueMatch(league, LEAGUE_MATCHES[8]).teamB], ['C', 'F']);
 });
 
-void test('参加者報告の承認とリーグ修正で順位決定戦の出場者・結果を更新する', () => {
+void test('旧女子3部リーグの報告は新トーナメントへ反映しない', () => {
   const state = createInitialAppState();
   const league = state.tournaments.day2.league3;
   league.teams = ['A', 'B', 'C', 'D', 'E', 'F'];
   for (const match of LEAGUE_MATCHES.filter((entry) => entry.group)) league.scores[match.id] = win();
   league.scores.L07 = win();
-  const corrected = applyApprovedReport(state, parseResultReport({
+  const report = parseResultReport({
     day: 'day2', matchId: 'D3-L01', teamA: 'A', teamB: 'B', submittedBy: 'B',
     games: [{ a: '1', b: '4' }, { a: '2', b: '4' }, { a: '4', b: '2' }],
-  }));
-  assert.equal(getMatchContext(corrected.tournaments.day2, 'D3-L07').teamA, 'B');
-  assert.deepEqual(corrected.tournaments.day2.league3.scores.L07, { a: '', b: '' });
+  });
+  assert.throws(() => applyApprovedReport(state, report), /旧リーグ戦/);
   assert.equal(state.tournaments.day2.league3.scores.L07.a, '2');
   assert.throws(() => parseResultReport({ day: 'day1', matchId: 'D3-L01', teamA: 'A', teamB: 'B', submittedBy: 'A', games: [win(), win(), win()] }));
 });
