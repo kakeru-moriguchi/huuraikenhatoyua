@@ -53,6 +53,7 @@ import {
   resolveTournament,
   scoreWinner,
   shuffleTeams,
+  swapSeedTeams,
   type BracketState,
   type MatchDefinition,
   type MatchId,
@@ -624,6 +625,56 @@ function DivisionSelector({
   );
 }
 
+function ManualPairingEditor({ bracket, label, hasDependentResult = false, onSwap }: {
+  bracket: BracketState;
+  label: string;
+  hasDependentResult?: boolean;
+  onSwap: (first: number, second: number) => void;
+}) {
+  const [pendingSwap, setPendingSwap] = useState<[number, number] | null>(null);
+  const hasResults = hasDependentResult || MATCH_IDS.some((id) => scoreHasInput(bracket.scores[id]));
+  const chooseTeam = (current: number, selected: number) => {
+    if (current === selected) return;
+    if (hasResults) setPendingSwap([current, selected]);
+    else onSwap(current, selected);
+  };
+
+  return <section className="manual-pairings" aria-label={`${label}の1回戦組み合わせ`}>
+    <div className="manual-pairings__heading"><div><h3>1回戦の組み合わせを手動変更</h3><p>各枠でチームを選ぶと、現在のチームと入れ替わります。登録済みのチームはそのまま残ります。</p></div><Shuffle size={19} /></div>
+    <div className="manual-pairings__grid">
+      {MATCHES.filter((match) => match.round === 1).map((match) => {
+        if (match.sourceA.type !== 'seed' || match.sourceB.type !== 'seed') return null;
+        const first = match.sourceA.seed - 1;
+        const second = match.sourceB.seed - 1;
+        return <div className="manual-pairings__match" key={match.id}>
+          <strong>{match.title}</strong>
+          <div className="manual-pairings__teams">
+            {([first, second] as const).map((seed, index) => <label key={seed}>
+              <span>{index === 0 ? '左' : '右'}のチーム</span>
+              <select aria-label={`${label} ${match.title} ${index === 0 ? '左' : '右'}のチーム`} value={seed} onChange={(event) => chooseTeam(seed, Number(event.target.value))}>
+                {bracket.teams.map((team, teamIndex) => <option key={teamIndex} value={teamIndex}>{team.trim() || `未登録の枠 ${teamIndex + 1}`}</option>)}
+              </select>
+            </label>)}
+            <span className="manual-pairings__versus">VS</span>
+          </div>
+        </div>;
+      })}
+    </div>
+    <AlertDialog open={pendingSwap !== null} onOpenChange={(open) => { if (!open) setPendingSwap(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>組み合わせを変更しますか？</AlertDialogTitle>
+          <AlertDialogDescription>出場チームが変わる試合と、その影響を受ける後続試合の入力済み結果はリセットされます。進行表の対戦カードも更新されます。</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={() => setPendingSwap(null)}>キャンセル</AlertDialogCancel>
+          <AlertDialogAction onClick={() => { if (pendingSwap) onSwap(...pendingSwap); setPendingSwap(null); }}>入れ替える</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </section>;
+}
+
 function BlockSelector({
   value,
   includeGrandFinal,
@@ -1100,6 +1151,12 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
     setActiveTab('bracket');
   };
 
+  const swapFirstRoundPairing = (first: number, second: number) => {
+    const change = (bracket: BracketState) => swapSeedTeams(bracket, first, second);
+    if (division === 2) updateDivisionTwoBlock(activeDay, selectedBlock, change);
+    else updateMainBracket(activeDay, division, change);
+  };
+
   const updateScore = (id: MatchId, side: 'a' | 'b', value: string) => {
     const change = (bracket: BracketState) => ({
       ...bracket,
@@ -1417,6 +1474,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               ? <p className="hint">{division === 2 ? `${selectedBlock}ブロック：` : ''}あと{currentTeamTarget - activeTeamCount}チームを登録してください。</p>
               : <p className="success-note"><Check size={15} /> {division === 2 ? `${selectedBlock}ブロックの` : ''}{currentTeamTarget}チーム登録が完了しました。</p>}
             {division === 2 && d2TeamCount < 16 ? <p className="hint">2部のランダム抽選まで、A・B合わせてあと{16 - d2TeamCount}チームです。</p> : null}
+            <ManualPairingEditor key={`${activeDay}-${division}-${selectedBlock}`} bracket={activeBracket} label={`${division}部${division === 2 ? ` ${selectedBlock}ブロック` : ''}`} hasDependentResult={division === 2 && scoreHasInput(activeTournament.divisions[2].grandFinal)} onSwap={swapFirstRoundPairing} />
             <div className="team-actions">
               {randomDrawHasResults ? (
                 <AlertDialog>
@@ -1447,6 +1505,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
               : <BracketBoard bracket={activeBracket} editable={false} displayPrefix={displayPrefix} onScore={updateScore} onGame={updateGameScore} />}
             {isAdmin ? <div className="panel-actions">
+              {!isGrandFinalView ? <Button variant="outline" className="manual-pairings__link" onClick={() => setActiveTab('teams')}>組み合わせを手動変更</Button> : null}
               <Button disabled={isGrandFinalView ? !grandFinalTeams[0] || !grandFinalTeams[1] : !blockReady} onClick={() => setActiveTab('scores')}>試合結果を入力 <ArrowRight size={16} /></Button>
             </div> : <div className="panel-actions"><Button onClick={() => setActiveTab('report')}>試合結果を報告 <ArrowRight size={16} /></Button></div>}
           </TabsContent>

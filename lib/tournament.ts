@@ -65,6 +65,13 @@ export function shuffleTeams(teams: string[], random: () => number = Math.random
   return shuffled;
 }
 
+export function swapSeedTeams(bracket: BracketState, first: number, second: number): BracketState {
+  if (!Number.isInteger(first) || !Number.isInteger(second) || first < 0 || second < 0 || first >= 8 || second >= 8 || first === second) return bracket;
+  const teams = [...bracket.teams];
+  [teams[first], teams[second]] = [teams[second], teams[first]];
+  return { ...bracket, teams };
+}
+
 function gameNumber(value: string): number | null {
   if (!/^\d{1,2}$/.test(value)) return null;
   const number = Number(value);

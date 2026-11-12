@@ -10,6 +10,7 @@ import {
   resolveGrandFinal,
   resolveTournament,
   shuffleTeams,
+  swapSeedTeams,
   type MatchId,
 } from '../lib/tournament.ts';
 
@@ -30,6 +31,21 @@ void test('ランダム抽選は全チームを重複・欠落なく並べ替え
 
   assert.notDeepEqual(shuffled, teams);
   assert.deepEqual([...shuffled].sort(), [...teams].sort());
+});
+
+void test('手動の組み合わせ変更はチームを入れ替え、影響した試合だけ結果を消す', () => {
+  const before = completedBracket();
+  const after = reconcileScores(before, swapSeedTeams(before, 0, 2));
+  assert.deepEqual(after.teams.slice(0, 3), ['Team 3', 'Team 2', 'Team 1']);
+  assert.equal(new Set(after.teams).size, 8);
+  assert.equal(after.scores.M01.a, '');
+  assert.equal(after.scores.M04.a, '');
+  assert.equal(after.scores.M05.a, '');
+  assert.equal(after.scores.M06.a, '');
+  assert.equal(after.scores.M09.a, '');
+  assert.equal(after.scores.M02.a, '2');
+  assert.equal(after.scores.M03.a, '2');
+  assert.equal(before.teams[0], 'Team 1');
 });
 
 void test('8チームの12試合から1位〜8位を重複なく決定する', () => {
