@@ -57,10 +57,14 @@ export function getMatchContext(tournament: TournamentState, id: ScheduleMatchId
     const { teamA, teamB, score } = leagueMatch(tournament.league3, match);
     return { teamA, teamB, score };
   }
-  if (id === 'D2-GF') {
-    const teamA = resolveTournament(tournament.divisions[2].A).M09.winner;
-    const teamB = resolveTournament(tournament.divisions[2].B).M09.winner;
-    return { teamA, teamB, score: tournament.divisions[2].grandFinal };
+  if (id === 'D2-GF' || id === 'D2-3P') {
+    const side = id === 'D2-GF' ? 'winner' : 'loser';
+    const teamA = resolveTournament(tournament.divisions[2].A).M09[side];
+    const teamB = resolveTournament(tournament.divisions[2].B).M09[side];
+    const score = id === 'D2-GF'
+      ? tournament.divisions[2].grandFinal
+      : tournament.divisions[2].thirdPlacePlayoff;
+    return { teamA, teamB, score };
   }
   const matchId = id.slice(-3) as MatchId;
   if (!MATCH_IDS.includes(matchId)) throw new ResultReportError('試合が見つかりません。');
@@ -87,6 +91,10 @@ export function applyApprovedReport(state: AppState, report: ResultReport): AppS
     target.divisions[2].grandFinal = score;
     return next;
   }
+  if (report.matchId === 'D2-3P') {
+    target.divisions[2].thirdPlacePlayoff = score;
+    return next;
+  }
   const matchId = report.matchId.slice(-3) as MatchId;
   if (report.matchId.startsWith('D1-') || report.matchId.startsWith('D3-')) {
     const division = report.matchId.startsWith('D1-') ? 1 : 3;
@@ -99,10 +107,15 @@ export function applyApprovedReport(state: AppState, report: ResultReport): AppS
   }
   const block = report.matchId.startsWith('D2-A-') ? 'A' : 'B';
   const division = target.divisions[2];
-  const before: [string, string] = [resolveTournament(division.A).M09.winner, resolveTournament(division.B).M09.winner];
+  const resolvedBefore = [resolveTournament(division.A), resolveTournament(division.B)] as const;
+  const beforeChampions: [string, string] = [resolvedBefore[0].M09.winner, resolvedBefore[1].M09.winner];
+  const beforeRunnersUp: [string, string] = [resolvedBefore[0].M09.loser, resolvedBefore[1].M09.loser];
   const bracket = division[block];
   division[block] = reconcileScores(bracket, { ...bracket, scores: { ...bracket.scores, [matchId]: score } });
-  const after: [string, string] = [resolveTournament(division.A).M09.winner, resolveTournament(division.B).M09.winner];
-  division.grandFinal = reconcileGrandFinal(before, after, division.grandFinal);
+  const resolvedAfter = [resolveTournament(division.A), resolveTournament(division.B)] as const;
+  const afterChampions: [string, string] = [resolvedAfter[0].M09.winner, resolvedAfter[1].M09.winner];
+  const afterRunnersUp: [string, string] = [resolvedAfter[0].M09.loser, resolvedAfter[1].M09.loser];
+  division.grandFinal = reconcileGrandFinal(beforeChampions, afterChampions, division.grandFinal);
+  division.thirdPlacePlayoff = reconcileGrandFinal(beforeRunnersUp, afterRunnersUp, division.thirdPlacePlayoff);
   return next;
 }

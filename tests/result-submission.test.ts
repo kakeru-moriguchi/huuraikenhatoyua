@@ -57,7 +57,7 @@ void test('出場チームが変わった古い報告を承認しない', () => 
   });
   assert.throws(() => applyApprovedReport(state, report));
 });
-void test('2部Aブロック優勝の変更で総合決勝をリセットし、総合決勝も3対戦で判定する', () => {
+void test('2部の決勝結果変更で総合決勝と総合3位決定戦をリセットし、両試合を報告できる', () => {
   const state = createInitialAppState();
   const division = state.tournaments.day1.divisions[2];
   for (const block of ['A', 'B'] as const) {
@@ -67,12 +67,14 @@ void test('2部Aブロック優勝の変更で総合決勝をリセットし、�
     }
   }
   division.grandFinal = { a: '2', b: '1' };
+  division.thirdPlacePlayoff = { a: '1', b: '2' };
   const before = getMatchContext(state.tournaments.day1, 'D2-A-M09');
   const changed = applyApprovedReport(state, parseResultReport({
     day: 'day1', matchId: 'D2-A-M09', teamA: before.teamA, teamB: before.teamB, submittedBy: before.teamB,
     games: [{ a: '2', b: '4' }, { a: '1', b: '4' }, { a: '4', b: '3' }],
   }));
   assert.deepEqual(changed.tournaments.day1.divisions[2].grandFinal, { a: '', b: '' });
+  assert.deepEqual(changed.tournaments.day1.divisions[2].thirdPlacePlayoff, { a: '', b: '' });
   const final = getMatchContext(changed.tournaments.day1, 'D2-GF');
   assert.equal(final.teamA, before.teamB);
   const approvedFinal = applyApprovedReport(changed, parseResultReport({
@@ -81,6 +83,14 @@ void test('2部Aブロック優勝の変更で総合決勝をリセットし、�
   }));
   assert.equal(getMatchContext(approvedFinal.tournaments.day1, 'D2-GF').score.a, '2');
   assert.equal(scoreWinner(approvedFinal.tournaments.day1.divisions[2].grandFinal), 'a');
+  const thirdPlace = getMatchContext(approvedFinal.tournaments.day1, 'D2-3P');
+  assert.equal(thirdPlace.teamA, before.teamA);
+  const approvedThirdPlace = applyApprovedReport(approvedFinal, parseResultReport({
+    day: 'day1', matchId: 'D2-3P', teamA: thirdPlace.teamA, teamB: thirdPlace.teamB, submittedBy: thirdPlace.teamB,
+    games: [{ a: '2', b: '4' }, { a: '1', b: '4' }, { a: '4', b: '3' }],
+  }));
+  assert.equal(getMatchContext(approvedThirdPlace.tournaments.day1, 'D2-3P').score.b, '2');
+  assert.equal(scoreWinner(approvedThirdPlace.tournaments.day1.divisions[2].thirdPlacePlayoff), 'b');
 });
 void test('ゲーム別得点を保存形式へ正規化しても団体戦結果を保持する', () => {
   const state = createInitialAppState();

@@ -106,12 +106,6 @@ const VERSION_FOUR_STORAGE_KEY = 'three-match-tournament-v4';
 const VERSION_THREE_STORAGE_KEY = 'three-match-tournament-v3';
 const PREVIOUS_STORAGE_KEY = 'three-match-tournament-v2';
 const LEGACY_STORAGE_KEY = 'three-match-tournament-v1';
-const GRAND_FINAL = {
-  id: 'D2-GF',
-  division: 2,
-  stage: 'grand_final',
-} as const;
-
 function secureRandom() {
   const [value] = crypto.getRandomValues(new Uint32Array(1));
   return value / 0x1_0000_0000;
@@ -150,16 +144,29 @@ function scheduleRows(tournament: TournamentState, division: DivisionId, day: To
     addBracket('D2-A', '2部 Aブロック', tournament.divisions[2].A);
     addBracket('D2-B', '2部 Bブロック', tournament.divisions[2].B);
     const champions = blockChampions(tournament.divisions[2]);
+    const runnersUp = blockRunnersUp(tournament.divisions[2]);
     const grandFinal = resolveGrandFinal(champions, tournament.divisions[2].grandFinal);
-    rows.push({
-      id: 'D2-GF',
-      section: '2部 総合決勝',
-      title: '総合決勝',
-      teamA: grandFinal.teamA,
-      teamB: grandFinal.teamB,
-      score: tournament.divisions[2].grandFinal,
-      winner: grandFinal.winner,
-    });
+    const thirdPlacePlayoff = resolveGrandFinal(runnersUp, tournament.divisions[2].thirdPlacePlayoff);
+    rows.push(
+      {
+        id: 'D2-GF',
+        section: '2部 総合順位決定戦',
+        title: '総合決勝',
+        teamA: grandFinal.teamA,
+        teamB: grandFinal.teamB,
+        score: tournament.divisions[2].grandFinal,
+        winner: grandFinal.winner,
+      },
+      {
+        id: 'D2-3P',
+        section: '2部 総合順位決定戦',
+        title: '総合3位決定戦',
+        teamA: thirdPlacePlayoff.teamA,
+        teamB: thirdPlacePlayoff.teamB,
+        score: tournament.divisions[2].thirdPlacePlayoff,
+        winner: thirdPlacePlayoff.winner,
+      },
+    );
   }
   if (division === 3) addBracket('D3', '3部', tournament.divisions[3]);
   return rows;
@@ -223,6 +230,13 @@ function blockChampions(division: DivisionTwoState): [string, string] {
   return [
     resolveTournament(division.A).M09.winner,
     resolveTournament(division.B).M09.winner,
+  ];
+}
+
+function blockRunnersUp(division: DivisionTwoState): [string, string] {
+  return [
+    resolveTournament(division.A).M09.loser,
+    resolveTournament(division.B).M09.loser,
   ];
 }
 
@@ -687,7 +701,7 @@ function BlockSelector({
   const items: Array<{ value: BlockId | 'grand'; label: string }> = [
     { value: 'A', label: 'Aブロック' },
     { value: 'B', label: 'Bブロック' },
-    ...(includeGrandFinal ? [{ value: 'grand' as const, label: '総合決勝' }] : []),
+    ...(includeGrandFinal ? [{ value: 'grand' as const, label: '総合順位決定戦' }] : []),
   ];
   return (
     <fieldset className="block-nav" aria-label="2部ステージ切替">
@@ -701,13 +715,23 @@ function BlockSelector({
   );
 }
 
-function GrandFinalCard({
+function OverallMatchCard({
+  id,
+  title,
+  sourceRank,
+  winnerRank,
+  loserRank,
   teams,
   score,
   editable,
   onScore,
   onGame,
 }: {
+  id: 'D2-GF' | 'D2-3P';
+  title: string;
+  sourceRank: 1 | 2;
+  winnerRank: 1 | 3;
+  loserRank: 2 | 4;
   teams: [string, string];
   score: Score;
   editable: boolean;
@@ -721,10 +745,10 @@ function GrandFinalCard({
   const tied = ready && (score.games ? score.games.some((game) => game.a !== '' && game.b !== '' && !gameWinner(game)) : score.a !== '' && score.b !== '' && score.a === score.b);
   return (
     <div className="grand-final-wrap">
-      <div className="grand-final-label"><Crown size={20} /><span>DIVISION 2</span><strong>総合決勝</strong></div>
+      <div className="grand-final-label">{id === 'D2-GF' ? <Crown size={20} /> : <Medal size={20} />}<span>DIVISION 2</span><strong>{title}</strong></div>
       <article className={`grand-final-card ${complete ? 'match-card--complete' : ''}`}>
         <div className="match-card__head">
-          <div><span className="match-id">{GRAND_FINAL.id}</span><h3>2部 総合決勝</h3></div>
+          <div><span className="match-id">{id}</span><h3>2部 {title}</h3></div>
           <span className={`status ${complete ? 'status--done' : ready ? 'status--ready' : ''}`}>
             {complete ? <Check size={13} /> : <CircleDot size={13} />}
             {complete ? '確定' : ready ? '入力待ち' : '両ブロック待ち'}
@@ -733,12 +757,12 @@ function GrandFinalCard({
         {(['a', 'b'] as const).map((side, index) => (
           <div className={`team-row grand-team-row ${outcome === side ? 'team-row--winner' : ''}`} key={side}>
             <div className="team-name">
-              <span className="source-label">{index === 0 ? 'Aブロック 1位' : 'Bブロック 1位'}</span>
+              <span className="source-label">{index === 0 ? 'A' : 'B'}ブロック {sourceRank}位</span>
               <strong>{teams[index] || '未確定'}</strong>
             </div>
             {editable ? (
               <Input
-                aria-label={`2部総合決勝 ${teams[index] || (index === 0 ? 'Aブロック代表' : 'Bブロック代表')}の得点`}
+                aria-label={`2部${title} ${teams[index] || (index === 0 ? 'Aブロック代表' : 'Bブロック代表')}の得点`}
                 className="score-input"
                 disabled={!ready || Boolean(score.games)}
                 inputMode="numeric"
@@ -752,9 +776,9 @@ function GrandFinalCard({
         ))}
         <GameDetails games={score.games} teamA={teams[0]} teamB={teams[1]} editable={editable} ready={ready} onChange={onGame} />
         {tied ? <p className="score-error">同点では確定できません。勝敗がつく得点を入力してください。</p> : null}
-        <p className="route-label"><ArrowRight size={13} /> 勝者 → 2部総合優勝 / 敗者 → 2部総合準優勝</p>
+        <p className="route-label"><ArrowRight size={13} /> 勝者 → 2部総合{winnerRank}位 / 敗者 → 2部総合{loserRank}位</p>
       </article>
-      {!ready ? <p className="grand-final-note">A・B両ブロックの優勝が確定すると、得点を入力できます。</p> : null}
+      {!ready ? <p className="grand-final-note">A・B両ブロックの{sourceRank}位が確定すると、得点を入力できます。</p> : null}
     </div>
   );
 }
@@ -1069,10 +1093,13 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
       const tournament = previous.tournaments[day];
       const current = tournament.divisions[2];
       const beforeChampions = blockChampions(current);
+      const beforeRunnersUp = blockRunnersUp(current);
       const nextBlock = reconcileScores(current[block], change(current[block]));
       const nextDivision = { ...current, [block]: nextBlock };
       const afterChampions = blockChampions(nextDivision);
+      const afterRunnersUp = blockRunnersUp(nextDivision);
       nextDivision.grandFinal = reconcileGrandFinal(beforeChampions, afterChampions, current.grandFinal);
+      nextDivision.thirdPlacePlayoff = reconcileGrandFinal(beforeRunnersUp, afterRunnersUp, current.thirdPlacePlayoff);
       return {
         ...previous,
         tournaments: {
@@ -1097,19 +1124,22 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   const activeTeamCount = activeTeams.filter((team) => team.trim()).length;
   const d2TeamCount = activeTournament.divisions[2].A.teams.filter(Boolean).length + activeTournament.divisions[2].B.teams.filter(Boolean).length;
   const grandFinalTeams = blockChampions(activeTournament.divisions[2]);
+  const thirdPlaceTeams = blockRunnersUp(activeTournament.divisions[2]);
   const grandFinalResolved = resolveGrandFinal(grandFinalTeams, activeTournament.divisions[2].grandFinal);
+  const thirdPlaceResolved = resolveGrandFinal(thirdPlaceTeams, activeTournament.divisions[2].thirdPlacePlayoff);
   const currentTeamCount = division === 2 ? d2TeamCount : activeTeamCount;
   const currentTeamTarget = division === 2 ? 16 : 8;
   const blockCompleted = MATCH_IDS.filter((id) => Boolean(activeResolved[id].winner)).length;
   const divisionTwoCompleted =
     MATCH_IDS.filter((id) => Boolean(resolveTournament(activeTournament.divisions[2].A)[id].winner)).length +
     MATCH_IDS.filter((id) => Boolean(resolveTournament(activeTournament.divisions[2].B)[id].winner)).length +
-    (grandFinalResolved.winner ? 1 : 0);
+    (grandFinalResolved.winner ? 1 : 0) +
+    (thirdPlaceResolved.winner ? 1 : 0);
   const currentCompleted = division === 2 ? divisionTwoCompleted : blockCompleted;
-  const currentMatchTarget = division === 2 ? 25 : 12;
+  const currentMatchTarget = division === 2 ? 26 : 12;
   const randomDrawReady = division === 2 ? d2TeamCount === 16 : activeTeamCount === currentTeamTarget;
   const randomDrawHasResults = division === 2
-    ? [...MATCH_IDS.map((id) => activeTournament.divisions[2].A.scores[id]), ...MATCH_IDS.map((id) => activeTournament.divisions[2].B.scores[id]), activeTournament.divisions[2].grandFinal]
+    ? [...MATCH_IDS.map((id) => activeTournament.divisions[2].A.scores[id]), ...MATCH_IDS.map((id) => activeTournament.divisions[2].B.scores[id]), activeTournament.divisions[2].grandFinal, activeTournament.divisions[2].thirdPlacePlayoff]
       .some(scoreHasInput)
     : MATCH_IDS.some((id) => scoreHasInput(activeBracket.scores[id]));
 
@@ -1130,13 +1160,16 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
         const tournament = previous.tournaments[activeDay];
         const current = tournament.divisions[2];
         const beforeChampions = blockChampions(current);
+        const beforeRunnersUp = blockRunnersUp(current);
         const teams = shuffleTeams([...current.A.teams, ...current.B.teams], secureRandom);
         const nextDivision: DivisionTwoState = {
           A: reconcileScores(current.A, { ...current.A, teams: teams.slice(0, 8) }),
           B: reconcileScores(current.B, { ...current.B, teams: teams.slice(8, 16) }),
           grandFinal: current.grandFinal,
+          thirdPlacePlayoff: current.thirdPlacePlayoff,
         };
         nextDivision.grandFinal = reconcileGrandFinal(beforeChampions, blockChampions(nextDivision), current.grandFinal);
+        nextDivision.thirdPlacePlayoff = reconcileGrandFinal(beforeRunnersUp, blockRunnersUp(nextDivision), current.thirdPlacePlayoff);
         return {
           ...previous,
           tournaments: {
@@ -1234,6 +1267,51 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             divisions: {
               ...tournament.divisions,
               2: { ...tournament.divisions[2], grandFinal: scoreFromGames(games) },
+            },
+          },
+        },
+      };
+    });
+  };
+  const updateThirdPlaceScore = (side: 'a' | 'b', value: string) => {
+    if (!thirdPlaceTeams[0] || !thirdPlaceTeams[1]) return;
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            divisions: {
+              ...tournament.divisions,
+              2: {
+                ...tournament.divisions[2],
+                thirdPlacePlayoff: { ...tournament.divisions[2].thirdPlacePlayoff, [side]: value },
+              },
+            },
+          },
+        },
+      };
+    });
+  };
+  const updateThirdPlaceGameScore = (index: number, side: 'a' | 'b', value: string) => {
+    if (!thirdPlaceTeams[0] || !thirdPlaceTeams[1]) return;
+    applyState((previous) => {
+      const tournament = previous.tournaments[activeDay];
+      const current = tournament.divisions[2].thirdPlacePlayoff;
+      const games = (current.games ?? createEmptyGames()).map((game, gameIndex) =>
+        gameIndex === index ? { ...game, [side]: value } : game,
+      ) as [GameScore, GameScore, GameScore];
+      return {
+        ...previous,
+        tournaments: {
+          ...previous.tournaments,
+          [activeDay]: {
+            ...tournament,
+            divisions: {
+              ...tournament.divisions,
+              2: { ...tournament.divisions[2], thirdPlacePlayoff: scoreFromGames(games) },
             },
           },
         },
@@ -1344,7 +1422,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
   const displayPrefix = division === 2 ? selectedBlock : undefined;
   const blockReady = activeTeamCount === currentTeamTarget;
   const blockFinished = currentCompleted === currentMatchTarget;
-  const divisionFinished = division === 2 ? divisionTwoCompleted === 25 : blockFinished;
+  const divisionFinished = division === 2 ? divisionTwoCompleted === 26 : blockFinished;
   const activeDayLabel = activeDay === 'day1' ? '1日目' : '2日目';
   const tournamentContext = `${activeDayLabel}・${activeTournament.category || 'カテゴリー未設定'}`;
 
@@ -1402,7 +1480,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           <div className="overview-copy">
             <span className="kicker">{tournamentContext}・{divisionLabel}・全チーム3試合保証</span>
             <h2>{division === 2 ? '2ブロックから、総合王者へ。' : '12試合で、1位から8位まで。'}</h2>
-            <p>{division === 2 ? 'A・B各ブロックを独立進行し、両優勝チームで総合決勝を行います。' : '勝敗を入力するだけで、次の対戦と最終順位を自動更新します。'}</p>
+            <p>{division === 2 ? 'A・B各ブロックを独立進行し、各ブロックの1位・2位で総合順位決定戦を行います。' : '勝敗を入力するだけで、次の対戦と最終順位を自動更新します。'}</p>
           </div>
           <div className="metrics">
             <div><span>登録チーム</span><strong>{currentTeamCount}<small>/ {currentTeamTarget}</small></strong></div>
@@ -1474,7 +1552,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               ? <p className="hint">{division === 2 ? `${selectedBlock}ブロック：` : ''}あと{currentTeamTarget - activeTeamCount}チームを登録してください。</p>
               : <p className="success-note"><Check size={15} /> {division === 2 ? `${selectedBlock}ブロックの` : ''}{currentTeamTarget}チーム登録が完了しました。</p>}
             {division === 2 && d2TeamCount < 16 ? <p className="hint">2部のランダム抽選まで、A・B合わせてあと{16 - d2TeamCount}チームです。</p> : null}
-            <ManualPairingEditor key={`${activeDay}-${division}-${selectedBlock}`} bracket={activeBracket} label={`${division}部${division === 2 ? ` ${selectedBlock}ブロック` : ''}`} hasDependentResult={division === 2 && scoreHasInput(activeTournament.divisions[2].grandFinal)} onSwap={swapFirstRoundPairing} />
+            <ManualPairingEditor key={`${activeDay}-${division}-${selectedBlock}`} bracket={activeBracket} label={`${division}部${division === 2 ? ` ${selectedBlock}ブロック` : ''}`} hasDependentResult={division === 2 && (scoreHasInput(activeTournament.divisions[2].grandFinal) || scoreHasInput(activeTournament.divisions[2].thirdPlacePlayoff))} onSwap={swapFirstRoundPairing} />
             <div className="team-actions">
               {randomDrawHasResults ? (
                 <AlertDialog>
@@ -1497,12 +1575,15 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
 
           <TabsContent value="bracket" className="panel panel--wide">
             <div className="panel-heading">
-              <div><span>STEP 03 · {divisionLabel}</span><h2>{division === 2 ? 'ブロック別トーナメント' : 'トーナメント'}</h2><p>{division === 2 ? 'A・Bの試合は独立し、各ブロック優勝が総合決勝へ進みます。' : '勝者側と敗者側の両方が順位決定戦へ進みます。'}</p></div>
+              <div><span>STEP 03 · {divisionLabel}</span><h2>{division === 2 ? 'ブロック別トーナメント' : 'トーナメント'}</h2><p>{division === 2 ? '各ブロック1位は総合決勝、2位は総合3位決定戦へ進みます。' : '勝者側と敗者側の両方が順位決定戦へ進みます。'}</p></div>
               <Shield size={30} />
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
             {isGrandFinalView
-              ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+              ? <div className="overall-matches">
+                <OverallMatchCard id="D2-GF" title="総合決勝" sourceRank={1} winnerRank={1} loserRank={2} teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+                <OverallMatchCard id="D2-3P" title="総合3位決定戦" sourceRank={2} winnerRank={3} loserRank={4} teams={thirdPlaceTeams} score={activeTournament.divisions[2].thirdPlacePlayoff} editable={false} onScore={updateThirdPlaceScore} onGame={updateThirdPlaceGameScore} />
+              </div>
               : <BracketBoard bracket={activeBracket} editable={false} displayPrefix={displayPrefix} onScore={updateScore} onGame={updateGameScore} />}
             {isAdmin ? <div className="panel-actions">
               {!isGrandFinalView ? <Button variant="outline" className="manual-pairings__link" onClick={() => setActiveTab('teams')}>組み合わせを手動変更</Button> : null}
@@ -1564,7 +1645,7 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
               {scheduleRows(activeTournament, division, activeDay).filter((row) => {
                 if (!row.teamA || !row.teamB) return false;
                 if (division !== 2) return true;
-                return d2View === 'grand' ? row.id === 'D2-GF' : row.id.startsWith(`D2-${d2View}-`);
+                return d2View === 'grand' ? row.id === 'D2-GF' || row.id === 'D2-3P' : row.id.startsWith(`D2-${d2View}-`);
               }).map((row) => <ResultReportCard key={`${activeDay}-${row.id}-${row.teamA}-${row.teamB}`} row={row} day={activeDay} />)}
             </div>
             {scheduleRows(activeTournament, division, activeDay).every((row) => !row.teamA || !row.teamB) ? <p className="grand-final-note">対戦チームが決まると、ここから報告できます。</p> : null}
@@ -1576,7 +1657,10 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
             {isGrandFinalView
-              ? <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+              ? <div className="overall-matches">
+                <OverallMatchCard id="D2-GF" title="総合決勝" sourceRank={1} winnerRank={1} loserRank={2} teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+                <OverallMatchCard id="D2-3P" title="総合3位決定戦" sourceRank={2} winnerRank={3} loserRank={4} teams={thirdPlaceTeams} score={activeTournament.divisions[2].thirdPlacePlayoff} editable onScore={updateThirdPlaceScore} onGame={updateThirdPlaceGameScore} />
+              </div>
               : <BracketBoard bracket={activeBracket} editable displayPrefix={displayPrefix} onScore={updateScore} onGame={updateGameScore} />}
             <div className="panel-actions">
               <Button disabled={!divisionFinished} onClick={() => setActiveTab('ranking')}>最終順位を見る <ArrowRight size={16} /></Button>
@@ -1606,16 +1690,21 @@ export function TournamentApp({ initialState, mode, initialLoadError = null }: T
           </TabsContent> : null}
           <TabsContent value="ranking" className="panel">
             <div className="panel-heading">
-              <div><span>STEP 05 · {divisionLabel}</span><h2>{division === 2 && d2View === 'grand' ? '2部 総合結果' : '最終順位'}</h2><p>{division === 2 ? 'A・B各ブロックの順位を保持し、総合決勝は優勝・準優勝のみ決定します。' : blockFinished ? '全12試合が終了し、最終順位が確定しました。' : `順位確定まであと${12 - blockCompleted}試合です。`}</p></div>
+              <div><span>STEP 05 · {divisionLabel}</span><h2>{division === 2 && d2View === 'grand' ? '2部 総合結果' : '最終順位'}</h2><p>{division === 2 ? '各ブロックの1位・2位による順位決定戦で、総合1位〜4位を決定します。' : blockFinished ? '全12試合が終了し、最終順位が確定しました。' : `順位確定まであと${12 - blockCompleted}試合です。`}</p></div>
               <Trophy size={30} />
             </div>
             {division === 2 ? <BlockSelector value={d2View} includeGrandFinal onChange={setD2View} /> : null}
             {isGrandFinalView ? (
               <div className="overall-result">
-                <GrandFinalCard teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+                <div className="overall-matches">
+                  <OverallMatchCard id="D2-GF" title="総合決勝" sourceRank={1} winnerRank={1} loserRank={2} teams={grandFinalTeams} score={activeTournament.divisions[2].grandFinal} editable={false} onScore={updateGrandFinalScore} onGame={updateGrandFinalGameScore} />
+                  <OverallMatchCard id="D2-3P" title="総合3位決定戦" sourceRank={2} winnerRank={3} loserRank={4} teams={thirdPlaceTeams} score={activeTournament.divisions[2].thirdPlacePlayoff} editable={false} onScore={updateThirdPlaceScore} onGame={updateThirdPlaceGameScore} />
+                </div>
                 <div className="overall-podium">
                   <div className="overall-podium__winner"><Crown size={28} /><span>2部 総合優勝</span><strong>{grandFinalResolved.winner || '未確定'}</strong></div>
                   <div><Medal size={24} /><span>2部 総合準優勝</span><strong>{grandFinalResolved.loser || '未確定'}</strong></div>
+                  <div><Medal size={24} /><span>2部 総合3位</span><strong>{thirdPlaceResolved.winner || '未確定'}</strong></div>
+                  <div><Medal size={24} /><span>2部 総合4位</span><strong>{thirdPlaceResolved.loser || '未確定'}</strong></div>
                 </div>
               </div>
             ) : <RankingList bracket={activeBracket} />}

@@ -154,8 +154,9 @@ void test('同じ学校名でも部門・ブロック別の練習コートと個
 
 void test('大会データに男女それぞれの進行表枠があり、旧データには空欄を自動補完する', () => {
   const current = createInitialAppState();
-  assert.equal(Object.keys(current.tournaments.day1.schedule).length, 58);
+  assert.equal(Object.keys(current.tournaments.day1.schedule).length, 59);
   assert.ok(current.tournaments.day1.schedule['D2-GF']);
+  assert.ok(current.tournaments.day1.schedule['D2-3P']);
   assert.ok(current.tournaments.day2.schedule['D3-L09']);
 
   const legacyLike = structuredClone(current) as unknown as Record<string, unknown>;
@@ -208,6 +209,7 @@ void test('部門コートは該当する進行表だけへ一括反映する', 
   assert.equal(schedule['D2-A-M01'].court, '第2コート');
   assert.equal(schedule['D2-B-M12'].court, '第2コート');
   assert.equal(schedule['D2-GF'].court, '第2コート');
+  assert.equal(schedule['D2-3P'].court, '第2コート');
   assert.equal(schedule['D1-M01'].court, '');
   assert.equal(schedule['D1-M01'].startTime, '09:30');
   assert.equal(schedule['D3-M01'].court, '');
@@ -228,5 +230,6 @@ void test('従来の大会データは1日目へ移行し2日目は初期状態�
   assert.equal(migrated.tournaments.day1.name, '既存大会');
   assert.equal(migrated.tournaments.day1.divisions[1].teams[0], 'Team 1');
   assert.deepEqual(migrated.tournaments.day1.divisions[2].grandFinal, { a: '2', b: '1' });
+  assert.deepEqual(migrated.tournaments.day1.divisions[2].thirdPlacePlayoff, { a: '', b: '' });
   assert.equal(migrated.tournaments.day2.divisions[1].teams[0], '');
 });

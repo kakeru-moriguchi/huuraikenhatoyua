@@ -9,6 +9,7 @@ export type ScheduleMatchId =
   | `D2-A-${MatchId}`
   | `D2-B-${MatchId}`
   | 'D2-GF'
+  | 'D2-3P'
   | `D3-${MatchId}`
   | `D3-${LeagueMatchId}`;
 export type ScheduleEntry = { startTime: string; court: string };
@@ -76,6 +77,7 @@ export const SCHEDULE_MATCH_IDS: ScheduleMatchId[] = [
   ...MATCH_IDS.map((id) => `D2-A-${id}` as const),
   ...MATCH_IDS.map((id) => `D2-B-${id}` as const),
   'D2-GF',
+  'D2-3P',
   ...MATCH_IDS.map((id) => `D3-${id}` as const),
   ...LEAGUE_MATCH_IDS.map((id) => `D3-${id}` as const),
 ];
@@ -84,6 +86,7 @@ export type DivisionTwoState = {
   A: BracketState;
   B: BracketState;
   grandFinal: Score;
+  thirdPlacePlayoff: Score;
 };
 
 export type TournamentState = {
@@ -158,6 +161,7 @@ type PartialDivisionTwo = {
   A?: Partial<BracketState>;
   B?: Partial<BracketState>;
   grandFinal?: Partial<Score>;
+  thirdPlacePlayoff?: Partial<Score>;
 };
 
 export type PreviousAppState = {
@@ -184,7 +188,7 @@ export function createTournament(category: string, name: string): TournamentStat
     date: '',
     divisions: {
       1: createEmptyBracket(),
-      2: { A: createEmptyBracket(), B: createEmptyBracket(), grandFinal: { a: '', b: '' } },
+      2: { A: createEmptyBracket(), B: createEmptyBracket(), grandFinal: { a: '', b: '' }, thirdPlacePlayoff: { a: '', b: '' } },
       3: createEmptyBracket(),
     },
     league3: createEmptyLeague(),
@@ -221,6 +225,7 @@ export function normalizeTournament(
       A: normalizeBracket(divisionTwo?.A),
       B: normalizeBracket(divisionTwo?.B),
       grandFinal: normalizeScore(divisionTwo?.grandFinal),
+      thirdPlacePlayoff: normalizeScore(divisionTwo?.thirdPlacePlayoff),
     },
     3: normalizeBracket(value?.divisions?.[3]),
   };
@@ -288,6 +293,7 @@ export function migratePreviousState(value: PreviousAppState, version: 1 | 2): A
         A: normalizeBracket(value.divisions[2]?.A),
         B: normalizeBracket(value.divisions[2]?.B),
         grandFinal: normalizeScore(value.divisions[2]?.grandFinal),
+        thirdPlacePlayoff: normalizeScore(value.divisions[2]?.thirdPlacePlayoff),
       },
       3: normalizeBracket(value.divisions[3]),
     };
